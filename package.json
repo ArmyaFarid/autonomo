@@ -1,0 +1,53 @@
+{
+  "name": "armya-facturation",
+  "version": "0.1.0",
+  "description": "Facturation pour travailleur autonome — Quebec",
+  "main": "out/main/index.js",
+  "author": "Armya Bakouan",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "postinstall": "electron-rebuild -f -w better-sqlite3"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "3.4.2",
+    "adm-zip": "0.5.12",
+    "better-sqlite3": "12.9.0",
+    "clsx": "2.1.1",
+    "drizzle-orm": "0.30.10",
+    "i18next": "23.11.5",
+    "jotai": "2.8.3",
+    "lucide-react": "0.378.0",
+    "puppeteer": "24.42.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-hook-form": "7.51.5",
+    "react-i18next": "14.1.2",
+    "react-loader-spinner": "6.1.6",
+    "tailwind-merge": "2.3.0",
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "@electron-toolkit/preload": "3.0.0",
+    "@electron-toolkit/utils": "3.0.0",
+    "@electron/rebuild": "3.7.2",
+    "@types/adm-zip": "0.5.5",
+    "@types/better-sqlite3": "7.6.12",
+    "@types/node": "20.14.2",
+    "@types/react": "18.3.3",
+    "@types/react-dom": "18.3.0",
+    "@vitejs/plugin-react": "4.3.0",
+    "autoprefixer": "10.4.19",
+    "drizzle-kit": "0.21.4",
+    "electron": "30.0.6",
+    "electron-vite": "2.3.0",
+    "postcss": "8.4.38",
+    "tailwindcss": "3.4.4",
+    "typescript": "5.4.5",
+    "vite": "5.2.12"
+  }
+}

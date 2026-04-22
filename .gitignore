@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+dist-ssr/
+out/
+build/
+
+# Vite
+.vite/
+
+# Electron Forge / Builder (if used)
+out-electron/
+release/
+*.asar
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+electron-debug.log*
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# TypeScript / cache
+*.tsbuildinfo
+
+# Electron cache
+electron-cache/
+electron/
+
+# Vite cache
+node_modules/.vite/
+
+# Coverage (if tests exist)
+coverage/

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Facture {{number}}</title>
+    <link rel="stylesheet" href="invoice-default.css" />
+</head>
+<body>
+    <div class="page">
+        <header class="header">
+            <div class="header-left">
+                {{#if logoUrl}}<img src="{{logoUrl}}" alt="Logo" class="logo" />{{/if}}
+                <div class="issuer">
+                    <strong>{{name}}</strong>
+                    <address>{{address}}</address>
+                </div>
+            </div>
+            <div class="header-right">
+                <h1 class="invoice-title">FACTURE</h1>
+                <table class="meta-table">
+                    <tr>
+                        <td class="meta-label">Numéro :</td>
+                        <td class="meta-value"><strong>{{number}}</strong></td>
+                    </tr>
+                    <tr>
+                        <td class="meta-label">Date :</td>
+                        <td class="meta-value">{{date}}</td>
+                    </tr>
+                </table>
+            </div>
+        </header>
+
+        <section class="bill-to">
+            <p class="section-label">FACTURÉ À</p>
+            <strong>{{clientName}}</strong>
+            <address>{{clientAddress}}</address>
+        </section>
+
+        <section class="period-section">
+            <p class="section-label">PÉRIODE DE TRAVAIL</p>
+            <table class="period-table">
+                <tr>
+                    <td>Du</td>
+                    <td><strong>{{periodStart}}</strong></td>
+                    <td>au</td>
+                    <td><strong>{{periodEnd}}</strong></td>
+                </tr>
+            </table>
+        </section>
+
+        <table class="line-items">
+            <thead>
+                <tr>
+                    <th class="col-desc">Description des services</th>
+                    <th class="col-qty">Semaine 1</th>
+                    <th class="col-qty">Semaine 2</th>
+                    <th class="col-qty">Total heures</th>
+                    <th class="col-rate">Taux horaire</th>
+                    <th class="col-amount">Montant</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="col-desc">{{description}}</td>
+                    <td class="col-qty center">{{hoursWeek1}} h</td>
+                    <td class="col-qty center">{{hoursWeek2}} h</td>
+                    <td class="col-qty center"><strong>{{totalHours}} h</strong></td>
+                    <td class="col-rate center">{{hourlyRate}}</td>
+                    <td class="col-amount right">{{subtotal}}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="totals">
+            <table class="totals-table">
+                <tr>
+                    <td class="totals-label">Sous-total</td>
+                    <td class="totals-value">{{subtotal}}</td>
+                </tr>
+                <tr>
+                    <td class="totals-label">TPS (5 %)</td>
+                    <td class="totals-value">{{gst}}</td>
+                </tr>
+                <tr>
+                    <td class="totals-label">TVQ (9,975 %)</td>
+                    <td class="totals-value">{{qst}}</td>
+                </tr>
+                <tr class="total-row">
+                    <td class="totals-label">TOTAL DÛ</td>
+                    <td class="totals-value"><strong>{{total}}</strong></td>
+                </tr>
+            </table>
+        </div>
+
+        <footer class="footer">
+            <p>Merci pour votre confiance.</p>
+        </footer>
+    </div>
+</body>
+</html>
