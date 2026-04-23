@@ -20,6 +20,12 @@ Each entry follows this structure:
 
 ## Log
 
+### [04/2026] — Template path from out/main/ is ../../, not ../../../
+**Context:** Phase 3 — PDF generation via Puppeteer
+**Mistake:** `electron/ipc/pdf.ts` used `join(__dirname, "../../../templates/...")` — at runtime `__dirname` is `out/main/` so three levels up lands at the parent of the project root, not the project root itself
+**Fix:** Changed to `join(__dirname, "../../templates/invoice-default.html")`
+**Rule:** From `out/main/index.js`, use `../../` to reach the project root
+
 ### [04/2026] — electron-vite config requires explicit entry points
 **Context:** Phase 1 project init — running `npm run build` for the first time
 **Mistake:** `electron.vite.config.ts` had no `build.rollupOptions.input` — electron-vite errored: "An entry point is required"

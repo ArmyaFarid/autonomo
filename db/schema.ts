@@ -65,6 +65,7 @@ export const invoices = sqliteTable("invoices", {
     total: real("total").notNull(),
     description: text("description").notNull(),
     additionalLines: text("additional_lines"),
+    invoiceType: text("invoice_type").notNull().default("weekly"),
     status: text("status").notNull().default("draft"),
     notes: text("notes"),
     pdfPath: text("pdf_path"),
@@ -205,6 +206,7 @@ function runMigrations(db: Database.Database): void {
             total REAL NOT NULL,
             description TEXT NOT NULL,
             additional_lines TEXT,
+            invoice_type TEXT NOT NULL DEFAULT 'weekly',
             status TEXT NOT NULL DEFAULT 'draft',
             notes TEXT,
             pdf_path TEXT,
@@ -234,6 +236,7 @@ function runMigrations(db: Database.Database): void {
         );
 
         CREATE TABLE IF NOT EXISTS expenses (
+
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             date TEXT NOT NULL,
             amount REAL NOT NULL,
@@ -248,4 +251,10 @@ function runMigrations(db: Database.Database): void {
             created_at TEXT NOT NULL
         );
     `)
+
+    try {
+        db.exec(`ALTER TABLE invoices ADD COLUMN invoice_type TEXT NOT NULL DEFAULT 'weekly'`)
+    } catch {
+        // Column already exists — safe to ignore
+    }
 }

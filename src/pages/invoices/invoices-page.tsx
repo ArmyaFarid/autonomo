@@ -1,11 +1,46 @@
-import { useTranslation } from "react-i18next"
+import { useState } from "react"
+import { InvoicesList } from "./invoices-list"
+import { CreateInvoiceForm } from "./create-invoice-form"
+import { InvoiceDetailModal } from "./invoice-detail-modal"
+import type { Invoice } from "../../types/definitions"
+
+type View = "list" | "create"
 
 export function InvoicesPage(): JSX.Element {
-    const { t } = useTranslation()
+    const [view, setView] = useState<View>("list")
+    const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
+    const [listRefreshKey, setListRefreshKey] = useState(0)
+
+    function handleCreated(): void {
+        setView("list")
+        setListRefreshKey((k) => k + 1)
+    }
+
     return (
-        <div className="p-8">
-            <h2 className="text-2xl font-semibold">{t("invoices.title")}</h2>
-            <p className="text-muted-foreground mt-1 text-sm">{t("common.noData")}</p>
-        </div>
+        <>
+            {view === "list" ? (
+                <InvoicesList
+                    refreshKey={listRefreshKey}
+                    onNew={() => setView("create")}
+                    onSelect={(inv) => setSelectedInvoice(inv)}
+                />
+            ) : (
+                <CreateInvoiceForm
+                    onSaved={handleCreated}
+                    onCancel={() => setView("list")}
+                />
+            )}
+
+            {selectedInvoice ? (
+                <InvoiceDetailModal
+                    invoice={selectedInvoice}
+                    onClose={() => setSelectedInvoice(null)}
+                    onUpdated={(updated) => {
+                        setSelectedInvoice(updated)
+                        setListRefreshKey((k) => k + 1)
+                    }}
+                />
+            ) : null}
+        </>
     )
 }

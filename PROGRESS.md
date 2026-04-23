@@ -4,10 +4,10 @@
 
 ---
 
-## Overall Status: 🟡 Phase 2 — In progress (Settings + Clients done, Invoices next)
+## Overall Status: 🟡 Phase 3 complete — Phase 4 (Payments) next
 
 **Last updated:** 2026-04-22
-**Last session summary:** Phase 2 complete. Settings + Clients UI built. Fixed 5 hardcoded strings that bypassed i18n (settings GST/QST/start number labels, archive confirm message, hours-per-week hint). All strings now go through t(). Clarified that client defaultHoursPerPeriod = hours PER WEEK (pre-fills both week 1 and week 2 on invoice creation, editable per invoice). Hourly rate also pre-filled from client but editable per invoice.
+**Last session summary:** Invoice PDF template completely redesigned to match user's reference invoice. New template: top-right issuer block, 4-column meta bar with large total amount, teal accent (#5a8fa5), week1+week2 as separate line items with date ranges, single "Taxe" line always shown (0,00 when no taxes). Updated pdf.ts to generate {{logoBlock}}, {{issuerBlock}}, {{lineItems}}, {{totalsRows}} HTML blocks dynamically.
 
 ---
 
@@ -54,13 +54,13 @@
 - [x] Client editing form (modal)
 - [x] Client archiving (confirm dialog)
 
-## Phase 3 — Invoices core ⬜
+## Phase 3 — Invoices core ✅
 
-- [ ] Invoice creation — Type A (standard hourly)
-- [ ] PDF generation with Puppeteer
-- [ ] invoice-default.html template — Quebec compliant
-- [ ] Status management (draft / sent / paid / overdue)
-- [ ] Hours proof attachments
+- [x] Invoice list (status badges, filters by status/year/client)
+- [x] Invoice creation form (client picker, period auto-suggest, hours week1+week2, rate, service multi-select, GST/QST toggle, save draft or issue)
+- [x] PDF generation (Puppeteer → templates/invoice-default.html)
+- [x] Status transitions: draft → sent → paid (confirm dialogs)
+- [x] Hours proof attachment (file picker → attachments/invoices/{id}/)
 
 ## Phase 4 — Advanced Invoices + Payments ⬜
 
@@ -99,9 +99,13 @@
 
 ## Notes for Next Session
 
-Start Phase 3 — Invoices core:
-1. `src/pages/invoices/invoices-page.tsx` — invoice list with status badges + filters
-2. `src/pages/invoices/create-invoice-page.tsx` — full invoice creation form (client picker, period, hours week 1/2, rate, description picker, GST/QST toggle)
-3. PDF generation flow — Puppeteer via `window.api.generateInvoicePdf(id)`
-4. Status transitions: draft → sent → paid
-5. All IPC handlers already implemented
+Start Phase 4 — Payments:
+1. Record full or partial payment on a sent invoice
+2. Methods: wire, cheque, interac, other
+3. Attach payment proof (file picker → attachments/invoices/{id}/)
+4. "Montant payé" in PDF totals should reflect actual payments once recorded (currently always 0,00)
+5. Payments IPC handlers already exist in `electron/ipc/payments.ts`
+
+Then Phase 5 — Expenses:
+- CRUD with 12 categories, auto 50% deductible for business_meals
+- Receipt attachment
