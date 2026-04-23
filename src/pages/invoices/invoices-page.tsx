@@ -4,16 +4,29 @@ import { CreateInvoiceForm } from "./create-invoice-form"
 import { InvoiceDetailModal } from "./invoice-detail-modal"
 import type { Invoice } from "../../types/definitions"
 
-type View = "list" | "create"
+type View = "list" | "create" | "edit"
 
 export function InvoicesPage(): JSX.Element {
     const [view, setView] = useState<View>("list")
     const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
+    const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null)
     const [listRefreshKey, setListRefreshKey] = useState(0)
 
-    function handleCreated(): void {
+    function handleSaved(): void {
         setView("list")
+        setEditingInvoice(null)
         setListRefreshKey((k) => k + 1)
+    }
+
+    function handleEdit(invoice: Invoice): void {
+        setSelectedInvoice(null)
+        setEditingInvoice(invoice)
+        setView("edit")
+    }
+
+    function handleCancelForm(): void {
+        setView("list")
+        setEditingInvoice(null)
     }
 
     return (
@@ -24,10 +37,16 @@ export function InvoicesPage(): JSX.Element {
                     onNew={() => setView("create")}
                     onSelect={(inv) => setSelectedInvoice(inv)}
                 />
+            ) : view === "create" ? (
+                <CreateInvoiceForm
+                    onSaved={handleSaved}
+                    onCancel={handleCancelForm}
+                />
             ) : (
                 <CreateInvoiceForm
-                    onSaved={handleCreated}
-                    onCancel={() => setView("list")}
+                    invoice={editingInvoice ?? undefined}
+                    onSaved={handleSaved}
+                    onCancel={handleCancelForm}
                 />
             )}
 
@@ -39,6 +58,7 @@ export function InvoicesPage(): JSX.Element {
                         setSelectedInvoice(updated)
                         setListRefreshKey((k) => k + 1)
                     }}
+                    onEdit={handleEdit}
                 />
             ) : null}
         </>

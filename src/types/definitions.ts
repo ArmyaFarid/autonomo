@@ -76,7 +76,7 @@ export interface Invoice {
     description: string
     additionalLines: string | null
     invoiceType: "weekly" | "freeform"
-    status: "draft" | "sent" | "paid" | "overdue"
+    status: "draft" | "sent" | "paid" | "overdue" | "refused" | "cancelled"
     notes: string | null
     pdfPath: string | null
     createdAt: string
