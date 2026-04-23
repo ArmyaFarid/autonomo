@@ -47,17 +47,16 @@ export interface Client {
     updatedAt: string
 }
 
-export interface FreeformLine {
-    description: string
-    rate: number
+export interface InvoiceLine {
+    id: number
+    invoiceId: number
+    position: number
+    label: string
+    description: string | null
     qty: number
+    unitPrice: number
     amount: number
-}
-
-export interface WeekEntry {
-    start: string
-    end: string
-    hours: number
+    createdAt: string
 }
 
 export interface Invoice {
@@ -67,19 +66,14 @@ export interface Invoice {
     issueDate: string
     periodStart: string
     periodEnd: string
-    hoursWeek1: number
-    hoursWeek2: number
-    totalHours: number
-    hourlyRate: number
+    invoiceType: "weekly" | "freeform"
+    description: string
     subtotal: number
     gstRate: number
     qstRate: number
     gstAmount: number
     qstAmount: number
     total: number
-    description: string
-    additionalLines: string | null
-    invoiceType: "weekly" | "freeform"
     status: "draft" | "sent" | "paid" | "overdue" | "refused" | "cancelled"
     notes: string | null
     pdfPath: string | null

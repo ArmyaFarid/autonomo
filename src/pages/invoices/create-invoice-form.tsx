@@ -8,7 +8,7 @@ import { useAtomValue } from "jotai"
 import { clientsAtom } from "../../store/clientsAtom"
 import { profileAtom } from "../../store/profileAtom"
 import { toIsoDate, formatDate, cn } from "../../lib/utils"
-import type { Client, Invoice, FreeformLine, WeekEntry } from "../../types/definitions"
+import type { Client, Invoice, InvoiceLine } from "../../types/definitions"
 
 const GST_RATE = 0.05
 const QST_RATE = 0.09975
@@ -23,6 +23,22 @@ const SERVICE_KEYS = [
     "documentation",
     "infrastructure",
 ] as const
+
+// Frontend-only shape for a week row (weekly mode)
+interface WeekRow {
+    start: string
+    end: string
+    hours: number
+}
+
+// Frontend-only shape for a freeform row
+interface FreeformRow {
+    label: string
+    description: string
+    qty: number
+    unitPrice: number
+    amount: number
+}
 
 function suggestPeriod(client: Client): { start: string; end: string } {
     const today = new Date()
@@ -53,11 +69,7 @@ function calcWeeks(startStr: string, endStr: string): { start: string; end: stri
         const weekStart = new Date(cursor)
         const weekEnd = new Date(cursor)
         weekEnd.setDate(weekEnd.getDate() + 6)
-        if (weekEnd > periodEnd) {
-            weekEnd.setFullYear(periodEnd.getFullYear())
-            weekEnd.setMonth(periodEnd.getMonth())
-            weekEnd.setDate(periodEnd.getDate())
-        }
+        if (weekEnd > periodEnd) weekEnd.setTime(periodEnd.getTime())
         result.push({ start: toIsoDate(weekStart), end: toIsoDate(weekEnd) })
         cursor = new Date(weekEnd)
         cursor.setDate(cursor.getDate() + 1)
@@ -65,13 +77,33 @@ function calcWeeks(startStr: string, endStr: string): { start: string; end: stri
     return result
 }
 
+function linesToWeekRows(lines: InvoiceLine[]): WeekRow[] {
+    return lines.map((l) => ({
+        start: l.description?.split(" – ")[0] ?? "",
+        end: l.description?.split(" – ")[1] ?? "",
+        hours: l.qty,
+    }))
+}
+
+function linesToFreeformRows(lines: InvoiceLine[], defaultRate: number): FreeformRow[] {
+    if (lines.length === 0) {
+        return [{ label: "", description: "", qty: 1, unitPrice: defaultRate, amount: defaultRate }]
+    }
+    return lines.map((l) => ({
+        label: l.label,
+        description: l.description ?? "",
+        qty: l.qty,
+        unitPrice: l.unitPrice,
+        amount: l.amount,
+    }))
+}
+
 const invoiceSchema = z.object({
     clientId: z.coerce.number().min(1),
     issueDate: z.string().min(1),
     periodStart: z.string().min(1),
     periodEnd: z.string().min(1),
-    totalHoursManual: z.coerce.number().min(0),
-    hourlyRate: z.coerce.number().min(0),
+    freeformTotalHours: z.coerce.number().min(0),
     description: z.string(),
     enableGst: z.boolean(),
     enableQst: z.boolean(),
@@ -82,33 +114,33 @@ type InvoiceFormValues = z.infer<typeof invoiceSchema>
 
 interface CreateInvoiceFormProps {
     invoice?: Invoice
+    invoiceLines?: InvoiceLine[]
     onSaved: () => void
     onCancel: () => void
 }
 
-export function CreateInvoiceForm({ invoice, onSaved, onCancel }: CreateInvoiceFormProps): JSX.Element {
+export function CreateInvoiceForm({ invoice, invoiceLines: editLines, onSaved, onCancel }: CreateInvoiceFormProps): JSX.Element {
     const { t } = useTranslation()
     const clients = useAtomValue(clientsAtom)
     const profile = useAtomValue(profileAtom)
     const locale = profile?.locale ?? "fr-CA"
     const activeClients = clients.filter((c) => c.active === 1)
     const editMode = !!invoice
+    const defaultRate = profile?.defaultHourlyRate ?? 23
 
     const initType = (invoice?.invoiceType ?? "weekly") as "weekly" | "freeform"
     const [invoiceType, setInvoiceType] = useState<"weekly" | "freeform">(initType)
 
-    const [weeklyWeeks, setWeeklyWeeks] = useState<WeekEntry[]>(() => {
-        if (invoice && initType === "weekly" && invoice.additionalLines) {
-            return JSON.parse(invoice.additionalLines) as WeekEntry[]
-        }
-        return []
-    })
-    const [freeformRows, setFreeformRows] = useState<FreeformLine[]>(() => {
-        if (invoice && initType === "freeform" && invoice.additionalLines) {
-            return JSON.parse(invoice.additionalLines) as FreeformLine[]
-        }
-        return [{ description: "", rate: profile?.defaultHourlyRate ?? 23, qty: 1, amount: profile?.defaultHourlyRate ?? 23 }]
-    })
+    const [weekRows, setWeekRows] = useState<WeekRow[]>(() =>
+        editMode && initType === "weekly" && editLines?.length
+            ? linesToWeekRows(editLines)
+            : []
+    )
+    const [freeformRows, setFreeformRows] = useState<FreeformRow[]>(() =>
+        editMode && initType === "freeform" && editLines
+            ? linesToFreeformRows(editLines, defaultRate)
+            : [{ label: "", description: "", qty: 1, unitPrice: defaultRate, amount: defaultRate }]
+    )
     const [selectedServices, setSelectedServices] = useState<Set<string>>(new Set())
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState("")
@@ -121,8 +153,7 @@ export function CreateInvoiceForm({ invoice, onSaved, onCancel }: CreateInvoiceF
             issueDate: invoice?.issueDate ?? toIsoDate(new Date()),
             periodStart: invoice?.periodStart ?? "",
             periodEnd: invoice?.periodEnd ?? "",
-            totalHoursManual: invoice?.totalHours ?? 0,
-            hourlyRate: invoice?.hourlyRate ?? profile?.defaultHourlyRate ?? 23,
+            freeformTotalHours: 0,
             description: invoice?.description ?? "",
             enableGst: (invoice?.gstRate ?? 0) > 0,
             enableQst: (invoice?.qstRate ?? 0) > 0,
@@ -134,15 +165,21 @@ export function CreateInvoiceForm({ invoice, onSaved, onCancel }: CreateInvoiceF
     const clientId = watch("clientId")
     const periodStart = watch("periodStart")
     const periodEnd = watch("periodEnd")
-    const totalHoursManual = watch("totalHoursManual")
-    const hourlyRate = watch("hourlyRate")
+    const freeformTotalHours = watch("freeformTotalHours")
     const enableGst = watch("enableGst")
     const enableQst = watch("enableQst")
 
-    const weeklyTotalHours = weeklyWeeks.reduce((sum, w) => sum + w.hours, 0)
-    const weeklySubtotal = weeklyTotalHours * Number(hourlyRate)
+    const weeklyTotalHours = weekRows.reduce((sum, w) => sum + w.hours, 0)
+    const weeklySubtotal = weekRows.reduce((sum, w) => sum + w.hours * (freeformRows[0]?.unitPrice ?? defaultRate), 0)
+
+    // For weekly, derive rate from first week row's unitPrice (stored separately via a ref)
+    const [weeklyRate, setWeeklyRate] = useState<number>(
+        editMode && initType === "weekly" && editLines?.[0] ? editLines[0].unitPrice : defaultRate
+    )
+
+    const weeklySubtotalFinal = weekRows.reduce((sum, w) => sum + w.hours * weeklyRate, 0)
     const freeformSubtotal = freeformRows.reduce((sum, r) => sum + r.amount, 0)
-    const subtotal = invoiceType === "weekly" ? weeklySubtotal : freeformSubtotal
+    const subtotal = invoiceType === "weekly" ? weeklySubtotalFinal : freeformSubtotal
     const gstAmount = enableGst ? subtotal * GST_RATE : 0
     const qstAmount = enableQst ? subtotal * QST_RATE : 0
     const total = subtotal + gstAmount + qstAmount
@@ -154,19 +191,19 @@ export function CreateInvoiceForm({ invoice, onSaved, onCancel }: CreateInvoiceF
         })
     }, [])
 
-    // Recalculate week structure when period changes
+    // Recalculate week structure when period changes (weekly mode only)
     useEffect(() => {
         if (!periodStart || !periodEnd || periodStart > periodEnd) return
         const structure = calcWeeks(periodStart, periodEnd)
-        setWeeklyWeeks((prev) =>
+        setWeekRows((prev) =>
             structure.map((w, i) => ({
                 ...w,
-                hours: i < prev.length ? prev[i].hours : (prev[0]?.hours ?? 0),
+                hours: i < prev.length ? prev[i].hours : 0,
             }))
         )
     }, [periodStart, periodEnd])
 
-    // Pre-fill from client
+    // Pre-fill from client when selected
     useEffect(() => {
         if (!clientId || Number(clientId) === 0) return
         const client = activeClients.find((c) => c.id === Number(clientId))
@@ -176,60 +213,62 @@ export function CreateInvoiceForm({ invoice, onSaved, onCancel }: CreateInvoiceF
         setValue("periodEnd", period.end)
         const hours = client.defaultHoursPerPeriod ?? 0
         const structure = calcWeeks(period.start, period.end)
-        setWeeklyWeeks(structure.map((w) => ({ ...w, hours })))
-        if (client.hourlyRate) {
-            setValue("hourlyRate", client.hourlyRate)
-            setFreeformRows((prev) =>
-                prev.map((r) => ({ ...r, rate: client.hourlyRate!, amount: client.hourlyRate! * r.qty }))
-            )
-        }
+        setWeekRows(structure.map((w) => ({ ...w, hours })))
+        const rate = client.hourlyRate ?? defaultRate
+        setWeeklyRate(rate)
+        setFreeformRows((prev) =>
+            prev.map((r) => ({ ...r, unitPrice: rate, amount: rate * r.qty }))
+        )
     }, [clientId])
 
-    // Sync description from service checkboxes
+    // Sync description textarea when service checkboxes change
     useEffect(() => {
-        const labels = SERVICE_KEYS.filter((k) => selectedServices.has(k)).map((k) => t(`invoices.services.${k}`))
+        const labels = SERVICE_KEYS
+            .filter((k) => selectedServices.has(k))
+            .map((k) => t(`invoices.services.${k}`))
         if (labels.length > 0) setValue("description", labels.join("\n"))
     }, [selectedServices])
 
     function toggleService(key: string): void {
         setSelectedServices((prev) => {
             const next = new Set(prev)
-            if (next.has(key)) next.delete(key)
-            else next.add(key)
+            next.has(key) ? next.delete(key) : next.add(key)
             return next
         })
     }
 
     function updateWeekHours(index: number, hours: number): void {
-        setWeeklyWeeks((prev) => {
+        setWeekRows((prev) => {
             const next = [...prev]
             next[index] = { ...next[index], hours }
             return next
         })
     }
 
-    function updateRow(index: number, field: keyof FreeformLine, rawValue: string): void {
+    function updateFreeformRow(index: number, field: keyof FreeformRow, value: string): void {
         setFreeformRows((prev) => {
             const next = [...prev]
             const row = { ...next[index] }
-            if (field === "description") {
-                row.description = rawValue
+            if (field === "label" || field === "description") {
+                row[field] = value
             } else {
-                const num = parseFloat(rawValue) || 0
+                const num = parseFloat(value) || 0
                 ;(row as Record<string, unknown>)[field] = num
-                row.amount = row.rate * row.qty
+                row.amount = row.unitPrice * row.qty
             }
             next[index] = row
             return next
         })
     }
 
-    function addRow(): void {
-        const rate = Number(form.getValues("hourlyRate"))
-        setFreeformRows((prev) => [...prev, { description: "", rate, qty: 1, amount: rate }])
+    function addFreeformRow(): void {
+        setFreeformRows((prev) => [
+            ...prev,
+            { label: "", description: "", qty: 1, unitPrice: prev[0]?.unitPrice ?? defaultRate, amount: prev[0]?.unitPrice ?? defaultRate },
+        ])
     }
 
-    function removeRow(index: number): void {
+    function removeFreeformRow(index: number): void {
         setFreeformRows((prev) => prev.filter((_, i) => i !== index))
     }
 
@@ -237,14 +276,14 @@ export function CreateInvoiceForm({ invoice, onSaved, onCancel }: CreateInvoiceF
         setError("")
 
         if (invoiceType === "weekly") {
-            const valid = await form.trigger(["clientId", "issueDate", "periodStart", "periodEnd", "hourlyRate"])
+            const valid = await form.trigger(["clientId", "issueDate", "periodStart", "periodEnd"])
             if (!valid) return
-            if (weeklyWeeks.length === 0) { setError(t("invoices.selectPeriodFirst")); return }
+            if (weekRows.length === 0) { setError(t("invoices.selectPeriodFirst")); return }
             if (weeklyTotalHours === 0) { setError(t("invoices.hoursRequired")); return }
         } else {
-            const valid = await form.trigger(["clientId", "issueDate", "periodStart", "periodEnd", "totalHoursManual", "hourlyRate"])
+            const valid = await form.trigger(["clientId", "issueDate", "periodStart", "periodEnd", "freeformTotalHours"])
             if (!valid) return
-            if (freeformRows.length === 0 || freeformRows.some((r) => !r.description.trim())) {
+            if (freeformRows.length === 0 || freeformRows.some((r) => !r.label.trim())) {
                 setError(t("invoices.freeformRowsError"))
                 return
             }
@@ -252,13 +291,15 @@ export function CreateInvoiceForm({ invoice, onSaved, onCancel }: CreateInvoiceF
 
         setLoading(true)
 
-        const common = {
+        const invoiceData = {
             number: nextNumber,
             clientId: Number(values.clientId),
             issueDate: values.issueDate,
             periodStart: values.periodStart,
             periodEnd: values.periodEnd,
+            invoiceType,
             description: values.description,
+            subtotal,
             gstRate: values.enableGst ? GST_RATE : 0,
             qstRate: values.enableQst ? QST_RATE : 0,
             gstAmount,
@@ -268,32 +309,28 @@ export function CreateInvoiceForm({ invoice, onSaved, onCancel }: CreateInvoiceF
             notes: values.notes || null,
         }
 
-        const payload =
-            invoiceType === "weekly"
-                ? {
-                      ...common,
-                      invoiceType: "weekly" as const,
-                      hoursWeek1: weeklyWeeks[0]?.hours ?? 0,
-                      hoursWeek2: weeklyWeeks[1]?.hours ?? 0,
-                      totalHours: weeklyTotalHours,
-                      hourlyRate: Number(values.hourlyRate),
-                      subtotal: weeklySubtotal,
-                      additionalLines: JSON.stringify(weeklyWeeks),
-                  }
-                : {
-                      ...common,
-                      invoiceType: "freeform" as const,
-                      hoursWeek1: Number(values.totalHoursManual),
-                      hoursWeek2: 0,
-                      totalHours: Number(values.totalHoursManual),
-                      hourlyRate: Number(values.hourlyRate),
-                      subtotal: freeformSubtotal,
-                      additionalLines: JSON.stringify(freeformRows),
-                  }
+        const lines = invoiceType === "weekly"
+            ? weekRows.map((w, i) => ({
+                position: i,
+                label: `${t("invoices.weekLabel")} ${i + 1}`,
+                description: `${formatDate(w.start, locale)} – ${formatDate(w.end, locale)}`,
+                qty: w.hours,
+                unitPrice: weeklyRate,
+                amount: w.hours * weeklyRate,
+            }))
+            : freeformRows.map((r, i) => ({
+                position: i,
+                label: r.label,
+                description: r.description || null,
+                qty: r.qty,
+                unitPrice: r.unitPrice,
+                amount: r.amount,
+            }))
 
         const result = editMode
-            ? await window.api.updateInvoice(invoice!.id, payload)
-            : await window.api.createInvoice(payload)
+            ? await window.api.updateInvoice(invoice!.id, { invoice: invoiceData, lines })
+            : await window.api.createInvoice({ invoice: invoiceData, lines })
+
         if (result.success) {
             onSaved()
         } else {
@@ -301,9 +338,6 @@ export function CreateInvoiceForm({ invoice, onSaved, onCancel }: CreateInvoiceF
             setLoading(false)
         }
     }
-
-    async function handleSaveDraft(): Promise<void> { await submit(form.getValues(), "draft") }
-    async function handleIssue(): Promise<void> { await submit(form.getValues(), "sent") }
 
     const fmt = (n: number): string =>
         locale.startsWith("en") ? `$${n.toFixed(2)}` : `${n.toFixed(2).replace(".", ",")} $`
@@ -391,11 +425,11 @@ export function CreateInvoiceForm({ invoice, onSaved, onCancel }: CreateInvoiceF
                 {/* Weekly: dynamic week rows */}
                 {invoiceType === "weekly" ? (
                     <Section title={t("invoices.totalHours")}>
-                        {weeklyWeeks.length === 0 ? (
+                        {weekRows.length === 0 ? (
                             <p className="text-muted-foreground text-sm italic">{t("invoices.selectPeriodFirst")}</p>
                         ) : (
                             <div className="space-y-2">
-                                {weeklyWeeks.map((week, i) => (
+                                {weekRows.map((week, i) => (
                                     <div key={i} className="flex items-center gap-4">
                                         <div className="w-48">
                                             <p className="text-sm font-medium">{t("invoices.weekLabel")} {i + 1}</p>
@@ -409,14 +443,12 @@ export function CreateInvoiceForm({ invoice, onSaved, onCancel }: CreateInvoiceF
                                             min="0"
                                             step="0.5"
                                             onChange={(e) => updateWeekHours(i, parseFloat(e.target.value) || 0)}
-                                            className="border-input bg-background ring-offset-background focus-visible:ring-ring flex h-10 w-24 rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                                            className="border-input bg-background focus-visible:ring-ring flex h-10 w-24 rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
                                         />
                                         <span className="text-muted-foreground text-sm">h</span>
-                                        {weeklyWeeks.length > 1 && (
-                                            <span className="text-muted-foreground text-sm ml-auto">
-                                                = {fmt(week.hours * Number(hourlyRate))}
-                                            </span>
-                                        )}
+                                        <span className="text-muted-foreground text-sm ml-auto">
+                                            = {fmt(week.hours * weeklyRate)}
+                                        </span>
                                     </div>
                                 ))}
                             </div>
@@ -424,13 +456,14 @@ export function CreateInvoiceForm({ invoice, onSaved, onCancel }: CreateInvoiceF
                         <Field label={`${t("invoices.hourlyRate")} *`}>
                             <div className="flex items-center gap-3">
                                 <input
-                                    {...form.register("hourlyRate")}
                                     type="number"
+                                    value={weeklyRate}
                                     min="0"
                                     step="0.5"
-                                    className="border-input bg-background ring-offset-background focus-visible:ring-ring flex h-10 w-36 rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                                    onChange={(e) => setWeeklyRate(parseFloat(e.target.value) || 0)}
+                                    className="border-input bg-background focus-visible:ring-ring flex h-10 w-36 rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
                                 />
-                                <span className="text-muted-foreground text-sm">= {fmt(weeklySubtotal)}</span>
+                                <span className="text-muted-foreground text-sm">= {fmt(weeklySubtotalFinal)}</span>
                             </div>
                         </Field>
                     </Section>
@@ -440,15 +473,15 @@ export function CreateInvoiceForm({ invoice, onSaved, onCancel }: CreateInvoiceF
                         <Section title={t("invoices.totalHoursCompliance")}>
                             <Field
                                 label={`${t("invoices.totalHoursCompliance")} *`}
-                                error={form.formState.errors.totalHoursManual?.message}
+                                error={form.formState.errors.freeformTotalHours?.message}
                             >
                                 <div className="flex items-center gap-3">
                                     <input
-                                        {...form.register("totalHoursManual")}
+                                        {...form.register("freeformTotalHours")}
                                         type="number"
                                         min="0"
                                         step="0.5"
-                                        className="border-input bg-background ring-offset-background focus-visible:ring-ring flex h-10 w-36 rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                                        className="border-input bg-background focus-visible:ring-ring flex h-10 w-36 rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
                                     />
                                     <span className="text-muted-foreground text-sm">h</span>
                                 </div>
@@ -457,7 +490,9 @@ export function CreateInvoiceForm({ invoice, onSaved, onCancel }: CreateInvoiceF
 
                         <Section title={t("invoices.freeformRows")}>
                             <div className="space-y-2">
-                                <div className="grid grid-cols-[1fr_90px_60px_90px_32px] gap-2 px-1">
+                                {/* Column headers */}
+                                <div className="grid grid-cols-[1fr_1fr_90px_60px_90px_32px] gap-2 px-1">
+                                    <span className="text-muted-foreground text-xs font-medium">{t("invoices.rowLabel")}</span>
                                     <span className="text-muted-foreground text-xs font-medium">{t("invoices.rowDescription")}</span>
                                     <span className="text-muted-foreground text-xs font-medium text-right">{t("invoices.rowRate")}</span>
                                     <span className="text-muted-foreground text-xs font-medium text-right">{t("invoices.rowQty")}</span>
@@ -465,20 +500,27 @@ export function CreateInvoiceForm({ invoice, onSaved, onCancel }: CreateInvoiceF
                                     <span />
                                 </div>
                                 {freeformRows.map((row, i) => (
-                                    <div key={i} className="grid grid-cols-[1fr_90px_60px_90px_32px] items-center gap-2">
+                                    <div key={i} className="grid grid-cols-[1fr_1fr_90px_60px_90px_32px] items-center gap-2">
+                                        <input
+                                            type="text"
+                                            value={row.label}
+                                            onChange={(e) => updateFreeformRow(i, "label", e.target.value)}
+                                            placeholder={t("invoices.rowLabel")}
+                                            className={inputCn}
+                                        />
                                         <input
                                             type="text"
                                             value={row.description}
-                                            onChange={(e) => updateRow(i, "description", e.target.value)}
-                                            placeholder={t("invoices.rowDescription")}
+                                            onChange={(e) => updateFreeformRow(i, "description", e.target.value)}
+                                            placeholder={t("invoices.rowDescriptionHint")}
                                             className={inputCn}
                                         />
                                         <input
                                             type="number"
-                                            value={row.rate}
+                                            value={row.unitPrice}
                                             min="0"
                                             step="0.5"
-                                            onChange={(e) => updateRow(i, "rate", e.target.value)}
+                                            onChange={(e) => updateFreeformRow(i, "unitPrice", e.target.value)}
                                             className={inputCn}
                                         />
                                         <input
@@ -486,7 +528,7 @@ export function CreateInvoiceForm({ invoice, onSaved, onCancel }: CreateInvoiceF
                                             value={row.qty}
                                             min="0"
                                             step="0.5"
-                                            onChange={(e) => updateRow(i, "qty", e.target.value)}
+                                            onChange={(e) => updateFreeformRow(i, "qty", e.target.value)}
                                             className={inputCn}
                                         />
                                         <div className="border-input bg-muted flex h-10 items-center justify-end rounded-md border px-3 text-sm font-medium">
@@ -494,7 +536,7 @@ export function CreateInvoiceForm({ invoice, onSaved, onCancel }: CreateInvoiceF
                                         </div>
                                         <button
                                             type="button"
-                                            onClick={() => removeRow(i)}
+                                            onClick={() => removeFreeformRow(i)}
                                             disabled={freeformRows.length === 1}
                                             className="text-muted-foreground hover:text-destructive flex h-8 w-8 items-center justify-center rounded disabled:opacity-30"
                                         >
@@ -504,7 +546,7 @@ export function CreateInvoiceForm({ invoice, onSaved, onCancel }: CreateInvoiceF
                                 ))}
                                 <button
                                     type="button"
-                                    onClick={addRow}
+                                    onClick={addFreeformRow}
                                     className="border-input bg-background hover:bg-muted/50 mt-1 inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm"
                                 >
                                     <Plus className="h-4 w-4" />
@@ -605,7 +647,7 @@ export function CreateInvoiceForm({ invoice, onSaved, onCancel }: CreateInvoiceF
                     </button>
                     <button
                         type="button"
-                        onClick={handleSaveDraft}
+                        onClick={() => submit(form.getValues(), "draft")}
                         disabled={loading}
                         className="border-input bg-background hover:bg-accent inline-flex h-10 items-center justify-center rounded-md border px-4 text-sm font-medium disabled:opacity-50"
                     >
@@ -613,7 +655,7 @@ export function CreateInvoiceForm({ invoice, onSaved, onCancel }: CreateInvoiceF
                     </button>
                     <button
                         type="button"
-                        onClick={handleIssue}
+                        onClick={() => submit(form.getValues(), "sent")}
                         disabled={loading}
                         className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-10 flex-1 items-center justify-center rounded-md px-4 text-sm font-medium disabled:opacity-50"
                     >

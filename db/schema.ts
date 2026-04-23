@@ -57,24 +57,33 @@ export const invoices = sqliteTable("invoices", {
     issueDate: text("issue_date").notNull(),
     periodStart: text("period_start").notNull(),
     periodEnd: text("period_end").notNull(),
-    hoursWeek1: real("hours_week1").notNull(),
-    hoursWeek2: real("hours_week2").notNull(),
-    totalHours: real("total_hours").notNull(),
-    hourlyRate: real("hourly_rate").notNull(),
+    invoiceType: text("invoice_type").notNull().default("weekly"),
+    description: text("description").notNull(),
     subtotal: real("subtotal").notNull(),
     gstRate: real("gst_rate").notNull().default(0),
     qstRate: real("qst_rate").notNull().default(0),
     gstAmount: real("gst_amount").notNull().default(0),
     qstAmount: real("qst_amount").notNull().default(0),
     total: real("total").notNull(),
-    description: text("description").notNull(),
-    additionalLines: text("additional_lines"),
-    invoiceType: text("invoice_type").notNull().default("weekly"),
     status: text("status").notNull().default("draft"),
     notes: text("notes"),
     pdfPath: text("pdf_path"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
+})
+
+export const invoiceLines = sqliteTable("invoice_lines", {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    invoiceId: integer("invoice_id")
+        .notNull()
+        .references(() => invoices.id),
+    position: integer("position").notNull(),
+    label: text("label").notNull(),
+    description: text("description"),
+    qty: real("qty").notNull().default(0),
+    unitPrice: real("unit_price").notNull().default(0),
+    amount: real("amount").notNull().default(0),
+    createdAt: text("created_at").notNull(),
 })
 
 export const invoiceAttachments = sqliteTable("invoice_attachments", {
@@ -163,6 +172,10 @@ function runMigrations(db: Database.Database): void {
             default_hourly_rate REAL NOT NULL DEFAULT 23,
             invoice_start_number INTEGER NOT NULL DEFAULT 1,
             invoice_number_format TEXT NOT NULL DEFAULT 'YYYY-NNN',
+            city TEXT,
+            province TEXT,
+            country TEXT,
+            postal_code TEXT,
             data_root_path TEXT,
             logo_path TEXT,
             locale TEXT NOT NULL DEFAULT 'fr-CA',
@@ -198,24 +211,31 @@ function runMigrations(db: Database.Database): void {
             issue_date TEXT NOT NULL,
             period_start TEXT NOT NULL,
             period_end TEXT NOT NULL,
-            hours_week1 REAL NOT NULL,
-            hours_week2 REAL NOT NULL,
-            total_hours REAL NOT NULL,
-            hourly_rate REAL NOT NULL,
+            invoice_type TEXT NOT NULL DEFAULT 'weekly',
+            description TEXT NOT NULL,
             subtotal REAL NOT NULL,
             gst_rate REAL NOT NULL DEFAULT 0,
             qst_rate REAL NOT NULL DEFAULT 0,
             gst_amount REAL NOT NULL DEFAULT 0,
             qst_amount REAL NOT NULL DEFAULT 0,
             total REAL NOT NULL,
-            description TEXT NOT NULL,
-            additional_lines TEXT,
-            invoice_type TEXT NOT NULL DEFAULT 'weekly',
             status TEXT NOT NULL DEFAULT 'draft',
             notes TEXT,
             pdf_path TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS invoice_lines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+            position INTEGER NOT NULL,
+            label TEXT NOT NULL,
+            description TEXT,
+            qty REAL NOT NULL DEFAULT 0,
+            unit_price REAL NOT NULL DEFAULT 0,
+            amount REAL NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL
         );
 
         CREATE TABLE IF NOT EXISTS invoice_attachments (
@@ -240,7 +260,6 @@ function runMigrations(db: Database.Database): void {
         );
 
         CREATE TABLE IF NOT EXISTS expenses (
-
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             date TEXT NOT NULL,
             amount REAL NOT NULL,
@@ -256,23 +275,13 @@ function runMigrations(db: Database.Database): void {
         );
     `)
 
-    try {
-        db.exec(`ALTER TABLE invoices ADD COLUMN invoice_type TEXT NOT NULL DEFAULT 'weekly'`)
-    } catch {
-        // Column already exists — safe to ignore
-    }
-
-    const profileAlters = [
+    // Idempotent profile address columns (existing databases)
+    for (const sql of [
         `ALTER TABLE profile ADD COLUMN city TEXT`,
         `ALTER TABLE profile ADD COLUMN province TEXT`,
         `ALTER TABLE profile ADD COLUMN country TEXT`,
         `ALTER TABLE profile ADD COLUMN postal_code TEXT`,
-    ]
-    for (const sql of profileAlters) {
-        try {
-            db.exec(sql)
-        } catch {
-            // Column already exists — safe to ignore
-        }
+    ]) {
+        try { db.exec(sql) } catch { /* already exists */ }
     }
 }

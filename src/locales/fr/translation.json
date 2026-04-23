@@ -165,7 +165,9 @@
             "meetings": "Réunions techniques et suivi de projet",
             "documentation": "Documentation technique",
             "infrastructure": "Déploiement et configuration d'infrastructure"
-        }
+        },
+        "rowLabel": "Titre",
+        "rowDescriptionHint": "Détail (optionnel)"
     },
     "expenses": {
         "title": "Dépenses",

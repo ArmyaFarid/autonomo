@@ -165,7 +165,9 @@
             "meetings": "Technical meetings and project follow-up",
             "documentation": "Technical documentation",
             "infrastructure": "Infrastructure deployment and configuration"
-        }
+        },
+        "rowLabel": "Title",
+        "rowDescriptionHint": "Detail (optional)"
     },
     "expenses": {
         "title": "Expenses",

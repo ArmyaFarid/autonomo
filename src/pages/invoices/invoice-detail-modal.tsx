@@ -5,13 +5,14 @@ import { useAtomValue } from "jotai"
 import { clientsAtom } from "../../store/clientsAtom"
 import { profileAtom } from "../../store/profileAtom"
 import { formatDate, formatCurrency, cn } from "../../lib/utils"
-import type { Invoice, FreeformLine, WeekEntry } from "../../types/definitions"
+import type { Invoice, InvoiceLine } from "../../types/definitions"
 
 interface InvoiceDetailModalProps {
     invoice: Invoice
+    lines: InvoiceLine[]
     onClose: () => void
-    onUpdated: (updated: Invoice) => void
-    onEdit: (invoice: Invoice) => void
+    onUpdated: (updated: Invoice, lines: InvoiceLine[]) => void
+    onEdit: (invoice: Invoice, lines: InvoiceLine[]) => void
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -23,7 +24,7 @@ const STATUS_COLORS: Record<string, string> = {
     cancelled: "bg-gray-200 text-gray-500",
 }
 
-export function InvoiceDetailModal({ invoice, onClose, onUpdated, onEdit }: InvoiceDetailModalProps): JSX.Element {
+export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit }: InvoiceDetailModalProps): JSX.Element {
     const { t } = useTranslation()
     const clients = useAtomValue(clientsAtom)
     const profile = useAtomValue(profileAtom)
@@ -35,13 +36,8 @@ export function InvoiceDetailModal({ invoice, onClose, onUpdated, onEdit }: Invo
     const [error, setError] = useState("")
 
     const client = clients.find((c) => c.id === invoice.clientId)
-    const isFreeform = (invoice.invoiceType ?? "weekly") === "freeform"
-    const freeformRows: FreeformLine[] = isFreeform && invoice.additionalLines
-        ? JSON.parse(invoice.additionalLines)
-        : []
-    const weeklyWeeks: WeekEntry[] = !isFreeform && invoice.additionalLines
-        ? JSON.parse(invoice.additionalLines)
-        : []
+    const isFreeform = invoice.invoiceType === "freeform"
+    const totalHours = lines.reduce((sum, l) => sum + l.qty, 0)
 
     const statusLabel = (s: string): string => ({
         draft: t("invoices.statusDraft"),
@@ -52,9 +48,13 @@ export function InvoiceDetailModal({ invoice, onClose, onUpdated, onEdit }: Invo
         cancelled: t("invoices.statusCancelled"),
     }[s] ?? s)
 
-    async function refreshInvoice(): Promise<Invoice | null> {
+    async function refreshInvoice(): Promise<{ invoice: Invoice; lines: InvoiceLine[] } | null> {
         const res = await window.api.getInvoice(invoice.id)
-        if (res.success && res.data) { onUpdated(res.data as Invoice); return res.data as Invoice }
+        if (res.success && res.data) {
+            const { invoice: updated, lines: updatedLines } = res.data as { invoice: Invoice; lines: InvoiceLine[] }
+            onUpdated(updated, updatedLines)
+            return { invoice: updated, lines: updatedLines }
+        }
         return null
     }
 
@@ -94,7 +94,8 @@ export function InvoiceDetailModal({ invoice, onClose, onUpdated, onEdit }: Invo
         setError("")
         const result = await window.api.reopenInvoice(invoice.id)
         if (result.success && result.data) {
-            onEdit(result.data as Invoice)
+            const { invoice: updated, lines: updatedLines } = result.data as { invoice: Invoice; lines: InvoiceLine[] }
+            onEdit(updated, updatedLines)
         } else {
             setError(result.error ?? t("common.error"))
             setStatusLoading(false)
@@ -144,8 +145,8 @@ export function InvoiceDetailModal({ invoice, onClose, onUpdated, onEdit }: Invo
                     <Row label={t("invoices.client")}>{client?.companyName ?? client?.name ?? "—"}</Row>
                     <Row label={t("invoices.issueDate")}>{formatDate(invoice.issueDate, locale)}</Row>
 
-                    {/* Period + hours */}
-                    <div className="rounded-md border p-4 space-y-2 bg-muted/30">
+                    {/* Period + lines */}
+                    <div className="rounded-md border p-4 space-y-3 bg-muted/30">
                         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                             {t("invoices.periodStart")} → {t("invoices.periodEnd")}
                         </p>
@@ -153,82 +154,43 @@ export function InvoiceDetailModal({ invoice, onClose, onUpdated, onEdit }: Invo
                             {formatDate(invoice.periodStart, locale)} → {formatDate(invoice.periodEnd, locale)}
                         </p>
 
-                        {isFreeform ? (
-                            <Row label={t("invoices.totalHours")}>
-                                <span className="font-semibold">{invoice.totalHours} h</span>
-                            </Row>
-                        ) : weeklyWeeks.length > 0 ? (
-                            <div className="space-y-2 pt-1 text-sm">
-                                {weeklyWeeks.map((week, i) => (
-                                    <div key={i} className="flex justify-between">
-                                        <span className="text-muted-foreground">
-                                            {t("invoices.weekLabel")} {i + 1}
-                                            <span className="ml-2 text-xs">
-                                                ({formatDate(week.start, locale)} – {formatDate(week.end, locale)})
-                                            </span>
-                                        </span>
-                                        <span className="font-medium">{week.hours} h</span>
-                                    </div>
-                                ))}
-                                <div className="flex justify-between border-t pt-1 font-semibold">
-                                    <span>{t("invoices.totalHours")}</span>
-                                    <span>{invoice.totalHours} h</span>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-3 gap-4 pt-1 text-sm">
-                                <div>
-                                    <p className="text-muted-foreground">{t("invoices.hoursWeek1")}</p>
-                                    <p className="font-medium">{invoice.hoursWeek1} h</p>
-                                </div>
-                                <div>
-                                    <p className="text-muted-foreground">{t("invoices.hoursWeek2")}</p>
-                                    <p className="font-medium">{invoice.hoursWeek2} h</p>
-                                </div>
-                                <div>
-                                    <p className="text-muted-foreground">{t("invoices.totalHours")}</p>
-                                    <p className="font-semibold">{invoice.totalHours} h</p>
-                                </div>
-                            </div>
-                        )}
-
-                        <Row label={t("invoices.hourlyRate")}>
-                            {formatCurrency(invoice.hourlyRate, locale)} / h
-                        </Row>
-                    </div>
-
-                    {/* Freeform rows */}
-                    {isFreeform ? (
-                        <div className="space-y-2">
-                            <p className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">
-                                {t("invoices.freeformRows")}
-                            </p>
-                            <div className="rounded-md border overflow-hidden">
-                                <table className="w-full text-sm">
+                        {/* Lines table */}
+                        {lines.length > 0 ? (
+                            <div className="rounded border overflow-hidden text-sm">
+                                <table className="w-full">
                                     <thead>
-                                        <tr className="border-b bg-muted/30">
-                                            <th className="px-3 py-2 text-left font-medium text-muted-foreground">{t("invoices.rowDescription")}</th>
+                                        <tr className="border-b bg-muted/40">
+                                            <th className="px-3 py-2 text-left font-medium text-muted-foreground">{t("invoices.rowLabel")}</th>
                                             <th className="px-3 py-2 text-right font-medium text-muted-foreground">{t("invoices.rowRate")}</th>
                                             <th className="px-3 py-2 text-right font-medium text-muted-foreground">{t("invoices.rowQty")}</th>
                                             <th className="px-3 py-2 text-right font-medium text-muted-foreground">{t("invoices.rowAmount")}</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {freeformRows.map((row, i) => (
-                                            <tr key={i} className="border-b last:border-0">
-                                                <td className="px-3 py-2">{row.description}</td>
-                                                <td className="px-3 py-2 text-right">{formatCurrency(row.rate, locale)}</td>
-                                                <td className="px-3 py-2 text-right">{row.qty}</td>
-                                                <td className="px-3 py-2 text-right font-medium">{formatCurrency(row.amount, locale)}</td>
+                                        {lines.map((line) => (
+                                            <tr key={line.id} className="border-b last:border-0">
+                                                <td className="px-3 py-2">
+                                                    <p className="font-medium">{line.label}</p>
+                                                    {line.description ? (
+                                                        <p className="text-xs text-muted-foreground">{line.description}</p>
+                                                    ) : null}
+                                                </td>
+                                                <td className="px-3 py-2 text-right">{formatCurrency(line.unitPrice, locale)}</td>
+                                                <td className="px-3 py-2 text-right">{line.qty} h</td>
+                                                <td className="px-3 py-2 text-right font-medium">{formatCurrency(line.amount, locale)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
                                 </table>
                             </div>
-                        </div>
-                    ) : null}
+                        ) : null}
 
-                    {/* Description — always shown */}
+                        <Row label={t("invoices.totalHours")}>
+                            <span className="font-semibold">{totalHours} h</span>
+                        </Row>
+                    </div>
+
+                    {/* Description */}
                     {invoice.description ? (
                         <div className="space-y-1 text-sm">
                             <p className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">
@@ -265,10 +227,9 @@ export function InvoiceDetailModal({ invoice, onClose, onUpdated, onEdit }: Invo
                 <div className="border-t px-6 py-4">
                     <div className="flex flex-wrap gap-2">
 
-                        {/* Edit — draft only */}
                         {status === "draft" ? (
                             <button
-                                onClick={() => onEdit(invoice)}
+                                onClick={() => onEdit(invoice, lines)}
                                 className="border-input bg-background hover:bg-accent inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium"
                             >
                                 <Pencil className="h-4 w-4" />
@@ -276,7 +237,6 @@ export function InvoiceDetailModal({ invoice, onClose, onUpdated, onEdit }: Invo
                             </button>
                         ) : null}
 
-                        {/* Generate PDF — not for paid */}
                         {status !== "paid" && !locked ? (
                             <button
                                 onClick={handleGeneratePdf}
@@ -288,7 +248,6 @@ export function InvoiceDetailModal({ invoice, onClose, onUpdated, onEdit }: Invo
                             </button>
                         ) : null}
 
-                        {/* Open existing PDF */}
                         {invoice.pdfPath ? (
                             <button
                                 onClick={handleOpenPdf}
@@ -299,7 +258,6 @@ export function InvoiceDetailModal({ invoice, onClose, onUpdated, onEdit }: Invo
                             </button>
                         ) : null}
 
-                        {/* Attach proof — not for paid/cancelled */}
                         {!locked ? (
                             <button
                                 onClick={handleAttachProof}
@@ -310,7 +268,6 @@ export function InvoiceDetailModal({ invoice, onClose, onUpdated, onEdit }: Invo
                             </button>
                         ) : null}
 
-                        {/* Mark sent — draft or overdue */}
                         {(status === "draft" || status === "overdue") ? (
                             <button
                                 onClick={() => handleStatusChange("sent", "invoices.confirmSent")}
@@ -322,7 +279,6 @@ export function InvoiceDetailModal({ invoice, onClose, onUpdated, onEdit }: Invo
                             </button>
                         ) : null}
 
-                        {/* Mark paid — sent or overdue */}
                         {(status === "sent" || status === "overdue") ? (
                             <button
                                 onClick={() => handleStatusChange("paid", "invoices.confirmPaid")}
@@ -334,7 +290,6 @@ export function InvoiceDetailModal({ invoice, onClose, onUpdated, onEdit }: Invo
                             </button>
                         ) : null}
 
-                        {/* Mark refused — sent or overdue */}
                         {(status === "sent" || status === "overdue") ? (
                             <button
                                 onClick={() => handleStatusChange("refused", "invoices.confirmRefused")}
@@ -346,7 +301,6 @@ export function InvoiceDetailModal({ invoice, onClose, onUpdated, onEdit }: Invo
                             </button>
                         ) : null}
 
-                        {/* Reopen — refused only → back to draft + opens edit */}
                         {status === "refused" ? (
                             <button
                                 onClick={handleReopen}
@@ -358,7 +312,6 @@ export function InvoiceDetailModal({ invoice, onClose, onUpdated, onEdit }: Invo
                             </button>
                         ) : null}
 
-                        {/* Cancel — anything except paid/cancelled */}
                         {!locked ? (
                             <button
                                 onClick={() => handleStatusChange("cancelled", "invoices.confirmCancelled")}
@@ -369,7 +322,6 @@ export function InvoiceDetailModal({ invoice, onClose, onUpdated, onEdit }: Invo
                                 {t("invoices.markCancelled")}
                             </button>
                         ) : null}
-
                     </div>
                 </div>
             </div>
