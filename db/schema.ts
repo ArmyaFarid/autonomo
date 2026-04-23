@@ -16,6 +16,10 @@ export const profile = sqliteTable("profile", {
     defaultHourlyRate: real("default_hourly_rate").notNull().default(23),
     invoiceStartNumber: integer("invoice_start_number").notNull().default(1),
     invoiceNumberFormat: text("invoice_number_format").notNull().default("YYYY-NNN"),
+    city: text("city"),
+    province: text("province"),
+    country: text("country"),
+    postalCode: text("postal_code"),
     dataRootPath: text("data_root_path"),
     logoPath: text("logo_path"),
     locale: text("locale").notNull().default("fr-CA"),
@@ -256,5 +260,19 @@ function runMigrations(db: Database.Database): void {
         db.exec(`ALTER TABLE invoices ADD COLUMN invoice_type TEXT NOT NULL DEFAULT 'weekly'`)
     } catch {
         // Column already exists — safe to ignore
+    }
+
+    const profileAlters = [
+        `ALTER TABLE profile ADD COLUMN city TEXT`,
+        `ALTER TABLE profile ADD COLUMN province TEXT`,
+        `ALTER TABLE profile ADD COLUMN country TEXT`,
+        `ALTER TABLE profile ADD COLUMN postal_code TEXT`,
+    ]
+    for (const sql of profileAlters) {
+        try {
+            db.exec(sql)
+        } catch {
+            // Column already exists — safe to ignore
+        }
     }
 }

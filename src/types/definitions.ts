@@ -15,6 +15,10 @@ export interface Profile {
     defaultHourlyRate: number
     invoiceStartNumber: number
     invoiceNumberFormat: string
+    city: string | null
+    province: string | null
+    country: string | null
+    postalCode: string | null
     dataRootPath: string | null
     logoPath: string | null
     locale: string

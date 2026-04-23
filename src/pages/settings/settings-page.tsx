@@ -11,6 +11,10 @@ import type { Profile } from "../../types/definitions"
 const profileSchema = z.object({
     name: z.string().min(1),
     address: z.string().min(1),
+    city: z.string().optional(),
+    province: z.string().optional(),
+    country: z.string().optional(),
+    postalCode: z.string().optional(),
     phone: z.string().optional(),
     email: z.string().email().optional().or(z.literal("")),
     gstNumber: z.string().optional(),
@@ -41,6 +45,10 @@ export function SettingsPage(): JSX.Element {
         defaultValues: {
             name: "",
             address: "",
+            city: "",
+            province: "",
+            country: "",
+            postalCode: "",
             phone: "",
             email: "",
             gstNumber: "",
@@ -60,6 +68,10 @@ export function SettingsPage(): JSX.Element {
             form.reset({
                 name: profile.name,
                 address: profile.address,
+                city: profile.city ?? "",
+                province: profile.province ?? "",
+                country: profile.country ?? "",
+                postalCode: profile.postalCode ?? "",
                 phone: profile.phone ?? "",
                 email: profile.email ?? "",
                 gstNumber: profile.gstNumber ?? "",
@@ -131,8 +143,24 @@ export function SettingsPage(): JSX.Element {
                         />
                     </Field>
                     <Field label={`${t("setup.address")} *`} error={form.formState.errors.address?.message}>
-                        <textarea {...form.register("address")} rows={3} className={textareaCn} />
+                        <textarea {...form.register("address")} rows={2} className={textareaCn} />
                     </Field>
+                    <div className="grid grid-cols-2 gap-4">
+                        <Field label={t("setup.city")}>
+                            <input {...form.register("city")} className={inputCn} placeholder="Chicoutimi" />
+                        </Field>
+                        <Field label={t("setup.province")}>
+                            <input {...form.register("province")} className={inputCn} placeholder="QC" />
+                        </Field>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <Field label={t("setup.postalCode")}>
+                            <input {...form.register("postalCode")} className={inputCn} placeholder="G7J 1G6" />
+                        </Field>
+                        <Field label={t("setup.country")}>
+                            <input {...form.register("country")} className={inputCn} placeholder="Canada" />
+                        </Field>
+                    </div>
                     <div className="grid grid-cols-2 gap-4">
                         <Field label={t("setup.phone")}>
                             <input {...form.register("phone")} className={inputCn} />
