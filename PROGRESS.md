@@ -4,10 +4,10 @@
 
 ---
 
-## Overall Status: 🟡 Phase 3 complete — Phase 4 (Payments) next
+## Overall Status: 🟡 Phase 6 done — Bug fixes next
 
-**Last updated:** 2026-04-22
-**Last session summary:** Invoice PDF template completely redesigned to match user's reference invoice. New template: top-right issuer block, 4-column meta bar with large total amount, teal accent (#5a8fa5), week1+week2 as separate line items with date ranges, single "Taxe" line always shown (0,00 when no taxes). Updated pdf.ts to generate {{logoBlock}}, {{issuerBlock}}, {{lineItems}}, {{totalsRows}} HTML blocks dynamically.
+**Last updated:** 2026-04-23
+**Last session summary:** Added optional dueDate to invoices (auto-suggested issueDate+30, clearable with X). Full Payments module: record full/partial payments per invoice, auto-mark invoice as paid when totalPaid >= total, attach proof file, delete payments. Invoice detail modal now shows dueDate, full payments list with remaining balance, and "Record payment" button. DB migration: due_date column added idempotently.
 
 ---
 
@@ -62,29 +62,44 @@
 - [x] Status transitions: draft → sent → paid (confirm dialogs)
 - [x] Hours proof attachment (file picker → attachments/invoices/{id}/)
 
-## Phase 4 — Advanced Invoices + Payments ⬜
+## Phase 4 — Expenses ✅
 
-- [ ] Special invoice — Type B (multiple lines)
-- [ ] Full payment recording
-- [ ] Partial payment recording
-- [ ] Payment proof attachment
-- [ ] Overdue invoice alerts
+- [x] Expense entry (date, amount, description, category)
+- [x] 12 categories + auto 50% deductible for business_meals
+- [x] GST/QST paid fields
+- [x] Receipt attachment (file picker → attachments/expenses/{id}/)
+- [x] Filters: by year, category, month
+- [x] Expense list with totals (total + deductible summary bar)
 
-## Phase 5 — Expenses ⬜
+## Phase 5 — Reports + Backup 🟡
 
-- [ ] Expense entry
-- [ ] Categories + auto deductibility
-- [ ] Receipt attachment
-- [ ] Filters and list view
+- [x] Dashboard (monthly cards + annual summary with tax reserve + spendable income)
+- [x] Annual tax report (revenue + expenses by category + deductible amounts + GST/QST summary)
+- [x] PDF + CSV export
+- [ ] Restore from zip (Settings → validate manifest → migrate if needed)
+- [ ] Auto-backup on launch ← DERNIÈRE PRIORITÉ
 
-## Phase 6 — Reports + Backup ⬜
+## Phase 5.5 — Bug fixes ⬜  ← NEXT
 
-- [ ] Dashboard
-- [ ] Annual tax report
-- [ ] PDF + CSV export
-- [ ] Auto-backup on launch
-- [ ] Restore from zip
-- [ ] First launch restore flow
+- [ ] Test and fix all known issues across the app
+
+## Phase 6 — Payments ✅
+
+- [x] Full payment recording
+- [x] Partial payment recording + remaining balance
+- [x] Payment methods: wire, cheque, Interac, other
+- [x] Payment proof attachment
+- [x] Auto-mark invoice as paid when totalPaid >= total
+- [x] Optional dueDate on invoice (auto-suggest +30 days, clearable)
+
+## Phase 7 — Bug fixes (round 2) ⬜
+
+- [ ] Test and fix all remaining issues after Payments
+
+## Phase 8 — Backup ⬜  (lowest priority)
+
+- [ ] Auto-backup on launch (check interval, create zip silently)
+- [ ] Restore from zip (Settings → validate manifest → migrate)
 
 ---
 
@@ -99,13 +114,19 @@
 
 ## Notes for Next Session
 
-Start Phase 4 — Payments:
-1. Record full or partial payment on a sent invoice
-2. Methods: wire, cheque, interac, other
-3. Attach payment proof (file picker → attachments/invoices/{id}/)
-4. "Montant payé" in PDF totals should reflect actual payments once recorded (currently always 0,00)
-5. Payments IPC handlers already exist in `electron/ipc/payments.ts`
+Phase 5.5 — Bug fixes:
+- Let user test the full app and report bugs
+- Fix all reported issues before moving to Payments
 
-Then Phase 5 — Expenses:
-- CRUD with 12 categories, auto 50% deductible for business_meals
-- Receipt attachment
+Then Phase 6 — Payments:
+- Record full or partial payment on a sent invoice
+- Methods: wire, cheque, Interac, other
+- Attach payment proof
+
+Auto-backup — last priority:
+
+1. Dashboard: monthly revenue (paid invoices), pending invoices count + amount, overdue alerts, monthly expenses, estimated net income
+2. Annual tax report: revenue + expenses by category + deductible totals + GST/QST summary
+3. PDF + CSV export for tax report
+4. Auto-backup on launch (check last backup date vs. configured interval, create zip silently)
+5. Restore from zip (Settings → validate manifest → migrate if needed)

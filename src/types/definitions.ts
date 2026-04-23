@@ -25,6 +25,7 @@ export interface Profile {
     backupIntervalDays: number
     backupRetentionCount: number
     lateInvoiceAlertDays: number
+    taxReserveRate: number
     createdAt: string
     updatedAt: string
 }
@@ -74,6 +75,7 @@ export interface Invoice {
     gstAmount: number
     qstAmount: number
     total: number
+    dueDate: string | null
     status: "draft" | "sent" | "paid" | "overdue" | "refused" | "cancelled"
     notes: string | null
     pdfPath: string | null

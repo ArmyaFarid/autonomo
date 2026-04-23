@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
     LayoutDashboard,
@@ -9,6 +9,9 @@ import {
     Settings,
 } from "lucide-react"
 import { cn } from "../../lib/utils"
+import { useSetAtom } from "jotai"
+import { clientsAtom } from "../../store/clientsAtom"
+import type { Client } from "../../types/definitions"
 import { DashboardPage } from "../../pages/dashboard/dashboard-page"
 import { ClientsPage } from "../../pages/clients/clients-page"
 import { InvoicesPage } from "../../pages/invoices/invoices-page"
@@ -34,6 +37,13 @@ const NAV_ITEMS: NavItem[] = [
 export function MainLayout(): JSX.Element {
     const { t } = useTranslation()
     const [activePage, setActivePage] = useState("dashboard")
+    const setClients = useSetAtom(clientsAtom)
+
+    useEffect(() => {
+        window.api.getClients().then((res) => {
+            if (res.success && res.data) setClients(res.data as Client[])
+        })
+    }, [])
 
     function renderPage(): JSX.Element {
         switch (activePage) {

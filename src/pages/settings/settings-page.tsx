@@ -26,6 +26,7 @@ const profileSchema = z.object({
     backupIntervalDays: z.coerce.number().int().min(1),
     backupRetentionCount: z.coerce.number().int().min(1),
     lateInvoiceAlertDays: z.coerce.number().int().min(1),
+    taxReserveRate: z.coerce.number().min(0).max(100),
 })
 
 type ProfileFormValues = z.infer<typeof profileSchema>
@@ -60,6 +61,7 @@ export function SettingsPage(): JSX.Element {
             backupIntervalDays: 7,
             backupRetentionCount: 10,
             lateInvoiceAlertDays: 30,
+            taxReserveRate: 20,
         },
     })
 
@@ -83,6 +85,7 @@ export function SettingsPage(): JSX.Element {
                 backupIntervalDays: profile.backupIntervalDays,
                 backupRetentionCount: profile.backupRetentionCount,
                 lateInvoiceAlertDays: profile.lateInvoiceAlertDays,
+                taxReserveRate: Math.round(profile.taxReserveRate * 100),
             })
             setLogoPath(profile.logoPath)
         }
@@ -93,7 +96,11 @@ export function SettingsPage(): JSX.Element {
         setSaved(false)
         setError("")
 
-        const result = await window.api.saveProfile({ ...values, logoPath })
+        const result = await window.api.saveProfile({
+            ...values,
+            taxReserveRate: values.taxReserveRate / 100,
+            logoPath,
+        })
         if (result.success && result.data) {
             setProfile(result.data as Profile)
             const lang = values.locale.startsWith("en") ? "en" : "fr"
@@ -274,6 +281,19 @@ export function SettingsPage(): JSX.Element {
                             min="1"
                             className="border-input bg-background ring-offset-background focus-visible:ring-ring flex h-10 w-40 rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
                         />
+                    </Field>
+                    <Field label={t("settings.taxReserveRate")}>
+                        <div className="flex items-center gap-2">
+                            <input
+                                {...form.register("taxReserveRate")}
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="1"
+                                className="border-input bg-background ring-offset-background focus-visible:ring-ring flex h-10 w-24 rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                            />
+                            <span className="text-muted-foreground text-sm">%</span>
+                        </div>
                     </Field>
                     <div className="flex items-center gap-3">
                         <button

@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { ChevronLeft, Plus, Trash2 } from "lucide-react"
+import { ChevronLeft, Plus, Trash2, X } from "lucide-react"
 import { useAtomValue } from "jotai"
 import { clientsAtom } from "../../store/clientsAtom"
 import { profileAtom } from "../../store/profileAtom"
@@ -40,6 +40,16 @@ interface FreeformRow {
     amount: number
 }
 
+function lastCompletedBiweeklyPeriod(): { start: string; end: string } {
+    const today = new Date()
+    const dayOfWeek = today.getDay()
+    const lastSunday = new Date(today)
+    lastSunday.setDate(today.getDate() - dayOfWeek)
+    const twoWeeksAgoMonday = new Date(lastSunday)
+    twoWeeksAgoMonday.setDate(lastSunday.getDate() - 13)
+    return { start: toIsoDate(twoWeeksAgoMonday), end: toIsoDate(lastSunday) }
+}
+
 function suggestPeriod(client: Client): { start: string; end: string } {
     const today = new Date()
     if (client.billingFrequency === "monthly") {
@@ -48,14 +58,7 @@ function suggestPeriod(client: Client): { start: string; end: string } {
         return { start: toIsoDate(firstOfMonth), end: toIsoDate(lastOfMonth) }
     }
     if (client.billingFrequency === "biweekly") {
-        const dayOfWeek = today.getDay()
-        const lastSunday = new Date(today)
-        lastSunday.setDate(today.getDate() - dayOfWeek)
-        const prevSunday = new Date(lastSunday)
-        prevSunday.setDate(lastSunday.getDate() - 7)
-        const monday = new Date(prevSunday)
-        monday.setDate(prevSunday.getDate() + 1)
-        return { start: toIsoDate(monday), end: toIsoDate(lastSunday) }
+        return lastCompletedBiweeklyPeriod()
     }
     return { start: toIsoDate(today), end: toIsoDate(today) }
 }
@@ -145,14 +148,24 @@ export function CreateInvoiceForm({ invoice, invoiceLines: editLines, onSaved, o
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState("")
     const [nextNumber, setNextNumber] = useState("—")
+    const [dueDate, setDueDate] = useState<string | null>(() => {
+        if (editMode) return invoice!.dueDate ?? null
+        const d = new Date()
+        d.setDate(d.getDate() + 30)
+        return toIsoDate(d)
+    })
+    // Skip the clientId effect on initial mount when editing — we already have saved data
+    const skipClientPrefillRef = useRef(editMode)
+
+    const defaultPeriod = lastCompletedBiweeklyPeriod()
 
     const form = useForm<InvoiceFormValues>({
         resolver: zodResolver(invoiceSchema),
         defaultValues: {
             clientId: invoice?.clientId ?? 0,
             issueDate: invoice?.issueDate ?? toIsoDate(new Date()),
-            periodStart: invoice?.periodStart ?? "",
-            periodEnd: invoice?.periodEnd ?? "",
+            periodStart: invoice?.periodStart ?? defaultPeriod.start,
+            periodEnd: invoice?.periodEnd ?? defaultPeriod.end,
             freeformTotalHours: 0,
             description: invoice?.description ?? "",
             enableGst: (invoice?.gstRate ?? 0) > 0,
@@ -203,8 +216,12 @@ export function CreateInvoiceForm({ invoice, invoiceLines: editLines, onSaved, o
         )
     }, [periodStart, periodEnd])
 
-    // Pre-fill from client when selected
+    // Pre-fill from client when selected — skipped on initial mount in edit mode
     useEffect(() => {
+        if (skipClientPrefillRef.current) {
+            skipClientPrefillRef.current = false
+            return
+        }
         if (!clientId || Number(clientId) === 0) return
         const client = activeClients.find((c) => c.id === Number(clientId))
         if (!client) return
@@ -272,20 +289,20 @@ export function CreateInvoiceForm({ invoice, invoiceLines: editLines, onSaved, o
         setFreeformRows((prev) => prev.filter((_, i) => i !== index))
     }
 
-    async function submit(values: InvoiceFormValues, status: "draft" | "sent"): Promise<void> {
+    async function submit(values: InvoiceFormValues, status: "draft" | "sent"): Promise<Invoice | null> {
         setError("")
 
         if (invoiceType === "weekly") {
             const valid = await form.trigger(["clientId", "issueDate", "periodStart", "periodEnd"])
-            if (!valid) return
-            if (weekRows.length === 0) { setError(t("invoices.selectPeriodFirst")); return }
-            if (weeklyTotalHours === 0) { setError(t("invoices.hoursRequired")); return }
+            if (!valid) return null
+            if (weekRows.length === 0) { setError(t("invoices.selectPeriodFirst")); return null }
+            if (weeklyTotalHours === 0) { setError(t("invoices.hoursRequired")); return null }
         } else {
             const valid = await form.trigger(["clientId", "issueDate", "periodStart", "periodEnd", "freeformTotalHours"])
-            if (!valid) return
+            if (!valid) return null
             if (freeformRows.length === 0 || freeformRows.some((r) => !r.label.trim())) {
                 setError(t("invoices.freeformRowsError"))
-                return
+                return null
             }
         }
 
@@ -305,6 +322,7 @@ export function CreateInvoiceForm({ invoice, invoiceLines: editLines, onSaved, o
             gstAmount,
             qstAmount,
             total,
+            dueDate: dueDate ?? null,
             status,
             notes: values.notes || null,
         }
@@ -332,11 +350,31 @@ export function CreateInvoiceForm({ invoice, invoiceLines: editLines, onSaved, o
             : await window.api.createInvoice({ invoice: invoiceData, lines })
 
         if (result.success) {
-            onSaved()
+            return (result.data as { invoice: Invoice }).invoice
         } else {
             setError(result.error ?? t("common.error"))
             setLoading(false)
+            return null
         }
+    }
+
+    async function handleSaveDraft(): Promise<void> {
+        const saved = await submit(form.getValues(), "draft")
+        if (saved) onSaved()
+    }
+
+    async function handleSaveAndPreview(): Promise<void> {
+        const saved = await submit(form.getValues(), "draft")
+        if (!saved) return
+        const pdfResult = await window.api.generateInvoicePdf(saved.id)
+        if (pdfResult.success && pdfResult.data) {
+            await window.api.openPath(pdfResult.data as string)
+        } else if (!pdfResult.success) {
+            setError(pdfResult.error ?? t("invoices.pdfError"))
+            setLoading(false)
+            return
+        }
+        onSaved()
     }
 
     const fmt = (n: number): string =>
@@ -371,6 +409,26 @@ export function CreateInvoiceForm({ invoice, invoiceLines: editLines, onSaved, o
                     </Field>
                     <Field label={`${t("invoices.issueDate")} *`}>
                         <input {...form.register("issueDate")} type="date" className={inputCn} />
+                    </Field>
+                    <Field label={t("invoices.dueDateOptional")}>
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="date"
+                                value={dueDate ?? ""}
+                                onChange={(e) => setDueDate(e.target.value || null)}
+                                className={cn(inputCn, "flex-1")}
+                            />
+                            {dueDate ? (
+                                <button
+                                    type="button"
+                                    onClick={() => setDueDate(null)}
+                                    className="border-input bg-background hover:bg-muted/50 flex h-10 w-10 shrink-0 items-center justify-center rounded-md border"
+                                    title={t("common.cancel")}
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            ) : null}
+                        </div>
                     </Field>
                 </Section>
 
@@ -647,7 +705,7 @@ export function CreateInvoiceForm({ invoice, invoiceLines: editLines, onSaved, o
                     </button>
                     <button
                         type="button"
-                        onClick={() => submit(form.getValues(), "draft")}
+                        onClick={handleSaveDraft}
                         disabled={loading}
                         className="border-input bg-background hover:bg-accent inline-flex h-10 items-center justify-center rounded-md border px-4 text-sm font-medium disabled:opacity-50"
                     >
@@ -655,11 +713,11 @@ export function CreateInvoiceForm({ invoice, invoiceLines: editLines, onSaved, o
                     </button>
                     <button
                         type="button"
-                        onClick={() => submit(form.getValues(), "sent")}
+                        onClick={handleSaveAndPreview}
                         disabled={loading}
                         className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-10 flex-1 items-center justify-center rounded-md px-4 text-sm font-medium disabled:opacity-50"
                     >
-                        {loading ? t("common.loading") : t("invoices.issue")}
+                        {loading ? t("common.loading") : t("invoices.saveAndPreview")}
                     </button>
                 </div>
             </form>

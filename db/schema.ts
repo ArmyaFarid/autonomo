@@ -26,6 +26,7 @@ export const profile = sqliteTable("profile", {
     backupIntervalDays: integer("backup_interval_days").notNull().default(7),
     backupRetentionCount: integer("backup_retention_count").notNull().default(10),
     lateInvoiceAlertDays: integer("late_invoice_alert_days").notNull().default(30),
+    taxReserveRate: real("tax_reserve_rate").notNull().default(0.20),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
 })
@@ -65,6 +66,7 @@ export const invoices = sqliteTable("invoices", {
     gstAmount: real("gst_amount").notNull().default(0),
     qstAmount: real("qst_amount").notNull().default(0),
     total: real("total").notNull(),
+    dueDate: text("due_date"),
     status: text("status").notNull().default("draft"),
     notes: text("notes"),
     pdfPath: text("pdf_path"),
@@ -182,6 +184,7 @@ function runMigrations(db: Database.Database): void {
             backup_interval_days INTEGER NOT NULL DEFAULT 7,
             backup_retention_count INTEGER NOT NULL DEFAULT 10,
             late_invoice_alert_days INTEGER NOT NULL DEFAULT 30,
+            tax_reserve_rate REAL NOT NULL DEFAULT 0.20,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
@@ -219,6 +222,7 @@ function runMigrations(db: Database.Database): void {
             gst_amount REAL NOT NULL DEFAULT 0,
             qst_amount REAL NOT NULL DEFAULT 0,
             total REAL NOT NULL,
+            due_date TEXT,
             status TEXT NOT NULL DEFAULT 'draft',
             notes TEXT,
             pdf_path TEXT,
@@ -275,12 +279,14 @@ function runMigrations(db: Database.Database): void {
         );
     `)
 
-    // Idempotent profile address columns (existing databases)
+    // Idempotent profile columns (existing databases)
     for (const sql of [
         `ALTER TABLE profile ADD COLUMN city TEXT`,
         `ALTER TABLE profile ADD COLUMN province TEXT`,
         `ALTER TABLE profile ADD COLUMN country TEXT`,
         `ALTER TABLE profile ADD COLUMN postal_code TEXT`,
+        `ALTER TABLE profile ADD COLUMN tax_reserve_rate REAL NOT NULL DEFAULT 0.20`,
+        `ALTER TABLE invoices ADD COLUMN due_date TEXT`,
     ]) {
         try { db.exec(sql) } catch { /* already exists */ }
     }
