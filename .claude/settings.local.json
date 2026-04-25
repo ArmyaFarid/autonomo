@@ -13,7 +13,12 @@
       "Bash(python3 *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(xargs -I{} basename {} .tsx)"
+      "Bash(xargs -I{} basename {} .tsx)",
+      "Bash(git status *)",
+      "Bash(node *)",
+      "Bash(git checkout *)",
+      "Bash(git merge refactor/computed-overdue --no-ff -m ' *)",
+      "Bash(git branch *)"
     ]
   }
 }
