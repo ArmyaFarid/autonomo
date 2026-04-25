@@ -293,4 +293,42 @@ function runMigrations(db: Database.Database): void {
 
     // overdue is now computed — convert any stored 'overdue' rows to 'sent'
     db.exec("UPDATE invoices SET status = 'sent' WHERE status = 'overdue'")
+
+    // Stale path cleanup — NULL/delete records pointing to files that no longer exist on disk.
+    // Runs every startup, safe because it only touches missing files.
+    const staleInvoices = db.prepare(
+        "SELECT id, pdf_path FROM invoices WHERE pdf_path IS NOT NULL"
+    ).all() as { id: number; pdf_path: string }[]
+    for (const row of staleInvoices) {
+        if (!existsSync(row.pdf_path)) {
+            db.prepare("UPDATE invoices SET pdf_path = NULL WHERE id = ?").run(row.id)
+        }
+    }
+
+    const staleExpenses = db.prepare(
+        "SELECT id, receipt_path FROM expenses WHERE receipt_path IS NOT NULL"
+    ).all() as { id: number; receipt_path: string }[]
+    for (const row of staleExpenses) {
+        if (!existsSync(row.receipt_path)) {
+            db.prepare("UPDATE expenses SET receipt_path = NULL WHERE id = ?").run(row.id)
+        }
+    }
+
+    const stalePayments = db.prepare(
+        "SELECT id, proof_path FROM payments WHERE proof_path IS NOT NULL"
+    ).all() as { id: number; proof_path: string }[]
+    for (const row of stalePayments) {
+        if (!existsSync(row.proof_path)) {
+            db.prepare("UPDATE payments SET proof_path = NULL WHERE id = ?").run(row.id)
+        }
+    }
+
+    const staleAttachments = db.prepare(
+        "SELECT id, path FROM invoice_attachments"
+    ).all() as { id: number; path: string }[]
+    for (const row of staleAttachments) {
+        if (!existsSync(row.path)) {
+            db.prepare("DELETE FROM invoice_attachments WHERE id = ?").run(row.id)
+        }
+    }
 }

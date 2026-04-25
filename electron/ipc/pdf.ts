@@ -133,12 +133,18 @@ export function registerPdfHandlers(): void {
             if (prof.qstNumber) issuerLines.push(`TVQ : ${prof.qstNumber}`)
             const issuerBlock = issuerLines.filter(Boolean).join("<br>")
 
+            const dueDateLabel = locale === "fr-CA" ? "Date d'échéance" : "Due date"
+            const dueDateBlock = invoice.dueDate
+                ? `<div class="meta-label" style="margin-top:6px">${dueDateLabel}</div><div class="meta-value" style="font-size:10pt;color:#c0392b">${formatDate(invoice.dueDate, locale)}</div>`
+                : ""
+
             const replacements: Record<string, string> = {
                 "{{logoBlock}}": logoBlock,
                 "{{issuerBlock}}": issuerBlock,
                 "{{clientName}}": client.companyName ?? client.name,
                 "{{clientAddress}}": (client.address ?? "").replace(/\n/g, "<br>"),
                 "{{date}}": formatDate(invoice.issueDate, locale),
+                "{{dueDateBlock}}": dueDateBlock,
                 "{{number}}": invoice.number,
                 "{{total}}": formatCurrency(invoice.total, locale),
                 "{{descriptionBlock}}": buildDescriptionBlock(invoice, lines, locale),

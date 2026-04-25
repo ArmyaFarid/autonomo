@@ -200,8 +200,12 @@ export function ExpenseFormModal({ expense, onClose, onSaved }: ExpenseFormModal
                         {form.formState.errors.category ? (
                             <p className="text-destructive text-xs">{form.formState.errors.category.message}</p>
                         ) : null}
-                        {category === "business_meals" ? (
-                            <p className="text-muted-foreground text-xs">{t("expenses.businessMealsNote")}</p>
+                        {category ? (
+                            <p className={`text-xs ${category === "business_meals" ? "text-amber-600 font-medium" : "text-muted-foreground"}`}>
+                                {category === "business_meals"
+                                    ? t("expenses.businessMealsNote")
+                                    : t("expenses.fullDeductible")}
+                            </p>
                         ) : null}
                     </div>
 
