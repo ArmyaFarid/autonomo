@@ -42,7 +42,7 @@ Thumbs.db
 
 # Electron cache
 electron-cache/
-electron/
+#electron/
 
 # Vite cache
 node_modules/.vite/
