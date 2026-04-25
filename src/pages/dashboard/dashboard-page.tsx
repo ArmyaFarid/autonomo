@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { AlertTriangle, Clock, TrendingUp, Receipt } from "lucide-react"
 import { useAtomValue } from "jotai"
 import { profileAtom } from "../../store/profileAtom"
-import { formatDate, cn } from "../../lib/utils"
+import { formatDate, cn, isOverdue } from "../../lib/utils"
 import type { Invoice, Expense } from "../../types/definitions"
 
 export function DashboardPage(): JSX.Element {
@@ -47,11 +47,7 @@ export function DashboardPage(): JSX.Element {
     const pendingInvoices = invoices.filter((inv) => inv.status === "sent")
     const pendingAmount = pendingInvoices.reduce((sum, inv) => sum + inv.total, 0)
 
-    const overdueInvoices = invoices.filter((inv) => {
-        if (inv.status !== "sent" && inv.status !== "overdue") return false
-        const daysOld = daysSince(inv.issueDate)
-        return daysOld > (profile?.lateInvoiceAlertDays ?? 30)
-    })
+    const overdueInvoices = invoices.filter((inv) => isOverdue(inv, profile?.lateInvoiceAlertDays ?? 30))
 
     // Annual metrics
     const ytdRevenue = invoices
@@ -185,12 +181,6 @@ export function DashboardPage(): JSX.Element {
 
 function getMonth(dateStr: string): number {
     return parseInt(dateStr.split("-")[1], 10)
-}
-
-function daysSince(dateStr: string): number {
-    const [y, m, d] = dateStr.split("-").map(Number)
-    const then = new Date(y, m - 1, d)
-    return Math.floor((Date.now() - then.getTime()) / 86400000)
 }
 
 interface StatCardProps {

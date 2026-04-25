@@ -13,7 +13,7 @@ function syncInvoiceStatus(invoiceId: number, now: string): void {
     const db = getDb()
     const invoice = db.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1).all()[0]
     if (!invoice) return
-    if (invoice.status !== "sent" && invoice.status !== "overdue" && invoice.status !== "paid") return
+    if (invoice.status !== "sent" && invoice.status !== "paid") return
 
     const allPayments = db.select().from(payments).where(eq(payments.invoiceId, invoiceId)).all()
     const totalPaid = allPayments.reduce((sum, p) => sum + p.amount, 0)

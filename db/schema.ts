@@ -290,4 +290,7 @@ function runMigrations(db: Database.Database): void {
     ]) {
         try { db.exec(sql) } catch { /* already exists */ }
     }
+
+    // overdue is now computed — convert any stored 'overdue' rows to 'sent'
+    db.exec("UPDATE invoices SET status = 'sent' WHERE status = 'overdue'")
 }

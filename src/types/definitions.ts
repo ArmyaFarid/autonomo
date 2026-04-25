@@ -76,7 +76,7 @@ export interface Invoice {
     qstAmount: number
     total: number
     dueDate: string | null
-    status: "draft" | "sent" | "paid" | "overdue" | "refused" | "cancelled"
+    status: "draft" | "sent" | "paid" | "refused" | "cancelled"
     notes: string | null
     pdfPath: string | null
     createdAt: string

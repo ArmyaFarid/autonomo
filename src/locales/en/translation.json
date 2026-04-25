@@ -182,6 +182,7 @@
         "rowDescriptionHint": "Detail (optional)",
         "dueDate": "Due date",
         "dueDateOptional": "Due date (optional)",
+        "overdueWarning": "This invoice is overdue — the payment deadline has passed.",
         "noPdfForPayment": "Generate the PDF before recording a payment.",
         "noPdfToEmit": "Generate the PDF before emitting the invoice.",
         "attachments": "Attachments",

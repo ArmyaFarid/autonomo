@@ -22,3 +22,18 @@ export function formatDate(dateStr: string, locale: string): string {
 export function toIsoDate(date: Date): string {
     return date.toISOString().split("T")[0]
 }
+
+export function daysSince(dateStr: string): number {
+    const [y, m, d] = dateStr.split("-").map(Number)
+    const then = new Date(y, m - 1, d)
+    return Math.floor((Date.now() - then.getTime()) / 86400000)
+}
+
+export function isOverdue(
+    invoice: { dueDate: string | null; status: string; issueDate: string },
+    lateAlertDays = 30
+): boolean {
+    if (invoice.status !== "sent") return false
+    if (invoice.dueDate) return new Date(invoice.dueDate) < new Date()
+    return daysSince(invoice.issueDate) > lateAlertDays
+}

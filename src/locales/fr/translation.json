@@ -182,6 +182,7 @@
         "rowDescriptionHint": "Détail (optionnel)",
         "dueDate": "Date d'échéance",
         "dueDateOptional": "Date d'échéance (optionnelle)",
+        "overdueWarning": "Cette facture est en retard — le délai de paiement est dépassé.",
         "noPdfForPayment": "Générez le PDF avant d'enregistrer un paiement.",
         "noPdfToEmit": "Générez le PDF avant d'émettre la facture.",
         "attachments": "Pièces jointes",
