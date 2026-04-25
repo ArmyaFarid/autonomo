@@ -4,10 +4,10 @@
 
 ---
 
-## Overall Status: 🟡 Phase 6 done — Bug fixes next
+## Overall Status: 🟡 File naming + attachments + import done — Bug fixes next
 
-**Last updated:** 2026-04-23
-**Last session summary:** Added optional dueDate to invoices (auto-suggested issueDate+30, clearable with X). Full Payments module: record full/partial payments per invoice, auto-mark invoice as paid when totalPaid >= total, attach proof file, delete payments. Invoice detail modal now shows dueDate, full payments list with remaining balance, and "Record payment" button. DB migration: due_date column added idempotently.
+**Last updated:** 2026-04-25
+**Last session summary:** New human-readable file naming scheme (flat per-year folders, slugified names). Attachment management UI in invoice detail modal (list/open/delete). Expense receipt open+delete. New "Import invoice" form for historical invoices (manual number, direct total, single hours field, optional PDF attach, initial status picker). Amber "Importée" badge in list and detail. Fixed subtotal watch crash in import form.
 
 ---
 
@@ -82,6 +82,10 @@
 ## Phase 5.5 — Bug fixes ⬜  ← NEXT
 
 - [ ] Test and fix all known issues across the app
+- [ ] Old invoices/expenses: pdfPath/receiptPath point to old folder structure — opening those files will fail (paths changed this session)
+- [ ] Smoke test import invoice end-to-end (create → attach PDF → open from detail modal)
+- [ ] Test attachment delete (proof file gone from disk + list)
+- [ ] Test expense receipt replace (old file deleted, new one stored)
 
 ## Phase 6 — Payments ✅
 
@@ -92,9 +96,27 @@
 - [x] Auto-mark invoice as paid when totalPaid >= total
 - [x] Optional dueDate on invoice (auto-suggest +30 days, clearable)
 
-## Phase 7 — Bug fixes (round 2) ⬜
+## Phase 7 — File naming + attachments + import ✅ (done 2026-04-25)
 
-- [ ] Test and fix all remaining issues after Payments
+**File naming scheme (electron/ipc/utils.ts):**
+- `buildSlug(name)` — lowercase, remove accents, spaces→hyphens
+- `resolveDestPath(dir, name)` — collision-safe (appends _2, _3...)
+- Invoice PDF: `attachments/invoices/{year}/invoice_{user}_{number}_{client}_{date}.pdf`
+- Hours proof: `hours-proof_{user}_{number}_{client}_{originalName}`
+- Payment proof: `payment-proof_{user}_{number}_{client}_{originalName}`
+- Expense receipt: `attachments/expenses/{year}/receipt_{user}_id{id}_{date}_{category}_{originalName}`
+- Imported PDF: same convention as generated PDF
+
+**Attachment management:**
+- Invoice detail modal: Attachments section (list, open, delete per file), attach button moved there
+- Expense form: receipt shows filename + open + delete (not just "attached" text)
+- New IPC: `invoices:deleteAttachment`, `expenses:deleteReceipt`, `invoices:attachImportedPdf`
+
+**Import invoice (`import-invoice-form.tsx`):**
+- invoiceType: "imported" — manual number, direct subtotal, single totalHours, GST/QST toggles, status picker (paid/sent/draft), optional PDF attach
+- Amber "Importée" badge in list + detail modal header
+- Generate PDF + Edit buttons hidden for imported invoices
+- Fix: subtotal `watch()` crash — `parseFloat(String(...)) || 0` guard
 
 ## Phase 8 — Backup ⬜  (lowest priority)
 
