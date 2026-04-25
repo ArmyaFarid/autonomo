@@ -4,7 +4,7 @@ import { X, FileDown, ExternalLink, CheckCircle, DollarSign, Paperclip, Pencil, 
 import { useAtomValue } from "jotai"
 import { clientsAtom } from "../../store/clientsAtom"
 import { profileAtom } from "../../store/profileAtom"
-import { formatDate, formatCurrency, cn } from "../../lib/utils"
+import { formatDate, formatCurrency, cn, isOverdue } from "../../lib/utils"
 import type { Invoice, InvoiceLine, Payment, InvoiceAttachment } from "../../types/definitions"
 import { PaymentFormModal } from "./payment-form-modal"
 import { MarkPaidDialog } from "./mark-paid-dialog"
@@ -224,9 +224,10 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
     const effectiveStatus = fullyPaid ? "paid" : localInvoice.status
     const status = effectiveStatus
 
+    const overdue = isOverdue(localInvoice, profile?.lateInvoiceAlertDays ?? 30)
     const locked = status === "paid" || status === "cancelled"
-    const canRecordPayment = status === "sent" || status === "overdue"
-    const showPaymentsSection = status === "sent" || status === "overdue" || status === "paid"
+    const canRecordPayment = status === "sent"
+    const showPaymentsSection = status === "sent" || status === "paid"
     const pdfGenerated = !!localInvoice.pdfPath
 
     return (
@@ -264,6 +265,12 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
                     <Row label={t("invoices.issueDate")}>{formatDate(localInvoice.issueDate, locale)}</Row>
                     {localInvoice.dueDate ? (
                         <Row label={t("invoices.dueDate")}>{formatDate(localInvoice.dueDate, locale)}</Row>
+                    ) : null}
+
+                    {overdue ? (
+                        <div className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                            <span className="font-medium">{t("invoices.overdueWarning")}</span>
+                        </div>
                     ) : null}
 
                     {/* Period + lines */}
@@ -507,7 +514,7 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
                             </button>
                         ) : null}
 
-                        {(status === "draft" || status === "overdue") ? (
+                        {status === "draft" ? (
                             <button
                                 onClick={() => handleStatusChange("sent", "invoices.confirmSent")}
                                 disabled={statusLoading || !pdfGenerated}
@@ -519,7 +526,7 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
                             </button>
                         ) : null}
 
-                        {(status === "sent" || status === "overdue") ? (
+                        {status === "sent" ? (
                             <button
                                 onClick={() => setShowMarkPaid(true)}
                                 disabled={statusLoading || !pdfGenerated}
@@ -531,7 +538,7 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
                             </button>
                         ) : null}
 
-                        {(status === "sent" || status === "overdue") ? (
+                        {status === "sent" ? (
                             <button
                                 onClick={() => handleStatusChange("refused", "invoices.confirmRefused")}
                                 disabled={statusLoading}

@@ -4,7 +4,7 @@ import { Plus, FileText, Upload } from "lucide-react"
 import { useAtom } from "jotai"
 import { invoicesAtom } from "../../store/invoicesAtom"
 import { clientsAtom } from "../../store/clientsAtom"
-import { cn, formatDate, formatCurrency } from "../../lib/utils"
+import { cn, formatDate, formatCurrency, isOverdue } from "../../lib/utils"
 import { useAtomValue } from "jotai"
 import { profileAtom } from "../../store/profileAtom"
 import type { Invoice, Client } from "../../types/definitions"
@@ -55,7 +55,11 @@ export function InvoicesList({ refreshKey, onNew, onImport, onSelect }: Invoices
     const years = [...new Set(invoices.map((i) => i.issueDate.slice(0, 4)))].sort().reverse()
 
     const visible = invoices.filter((inv) => {
-        if (filterStatus && inv.status !== filterStatus) return false
+        if (filterStatus === "overdue") {
+            if (!isOverdue(inv, profile?.lateInvoiceAlertDays ?? 30)) return false
+        } else if (filterStatus && inv.status !== filterStatus) {
+            return false
+        }
         if (filterYear && !inv.issueDate.startsWith(filterYear)) return false
         if (filterClientId && inv.clientId !== Number(filterClientId)) return false
         return true
@@ -190,9 +194,16 @@ export function InvoicesList({ refreshKey, onNew, onImport, onSelect }: Invoices
                                             {formatCurrency(inv.total, locale)}
                                         </td>
                                         <td className="px-4 py-3">
-                                            <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", STATUS_COLORS[inv.status])}>
-                                                {statusLabel(inv.status)}
-                                            </span>
+                                            <div className="flex items-center gap-1.5">
+                                                <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", STATUS_COLORS[inv.status])}>
+                                                    {statusLabel(inv.status)}
+                                                </span>
+                                                {isOverdue(inv, profile?.lateInvoiceAlertDays ?? 30) ? (
+                                                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                                                        {t("invoices.statusOverdue")}
+                                                    </span>
+                                                ) : null}
+                                            </div>
                                         </td>
                                     </tr>
                                 )
