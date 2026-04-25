@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Plus, FileText } from "lucide-react"
+import { Plus, FileText, Upload } from "lucide-react"
 import { useAtom } from "jotai"
 import { invoicesAtom } from "../../store/invoicesAtom"
 import { clientsAtom } from "../../store/clientsAtom"
@@ -12,6 +12,7 @@ import type { Invoice, Client } from "../../types/definitions"
 interface InvoicesListProps {
     refreshKey: number
     onNew: () => void
+    onImport: () => void
     onSelect: (invoice: Invoice) => void
 }
 
@@ -24,7 +25,7 @@ const STATUS_COLORS: Record<string, string> = {
     cancelled: "bg-gray-200 text-gray-500",
 }
 
-export function InvoicesList({ refreshKey, onNew, onSelect }: InvoicesListProps): JSX.Element {
+export function InvoicesList({ refreshKey, onNew, onImport, onSelect }: InvoicesListProps): JSX.Element {
     const { t } = useTranslation()
     const [invoices, setInvoices] = useAtom(invoicesAtom)
     const clients = useAtomValue(clientsAtom)
@@ -78,13 +79,22 @@ export function InvoicesList({ refreshKey, onNew, onSelect }: InvoicesListProps)
                         {invoices.length} facture{invoices.length !== 1 ? "s" : ""}
                     </p>
                 </div>
-                <button
-                    onClick={onNew}
-                    className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-9 items-center gap-2 rounded-md px-4 text-sm font-medium"
-                >
-                    <Plus className="h-4 w-4" />
-                    {t("invoices.new")}
-                </button>
+                <div className="flex gap-2">
+                    <button
+                        onClick={onImport}
+                        className="border-input bg-background hover:bg-accent inline-flex h-9 items-center gap-2 rounded-md border px-4 text-sm font-medium"
+                    >
+                        <Upload className="h-4 w-4" />
+                        {t("invoices.import")}
+                    </button>
+                    <button
+                        onClick={onNew}
+                        className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-9 items-center gap-2 rounded-md px-4 text-sm font-medium"
+                    >
+                        <Plus className="h-4 w-4" />
+                        {t("invoices.new")}
+                    </button>
+                </div>
             </div>
 
             <div className="mb-4 flex gap-3">
@@ -161,7 +171,16 @@ export function InvoicesList({ refreshKey, onNew, onSelect }: InvoicesListProps)
                                         className="cursor-pointer border-b last:border-0 hover:bg-muted/30"
                                         onClick={() => onSelect(inv)}
                                     >
-                                        <td className="px-4 py-3 font-mono font-medium">{inv.number}</td>
+                                        <td className="px-4 py-3">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-mono font-medium">{inv.number}</span>
+                                                {inv.invoiceType === "imported" ? (
+                                                    <span className="rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-700">
+                                                        {t("invoices.typeImported")}
+                                                    </span>
+                                                ) : null}
+                                            </div>
+                                        </td>
                                         <td className="px-4 py-3">{client?.companyName ?? client?.name ?? "—"}</td>
                                         <td className="text-muted-foreground px-4 py-3">{formatDate(inv.issueDate, locale)}</td>
                                         <td className="text-muted-foreground px-4 py-3">

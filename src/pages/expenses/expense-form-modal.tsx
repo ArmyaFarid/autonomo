@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { X, Paperclip, Check } from "lucide-react"
+import { X, Paperclip, Check, ExternalLink, Trash2 } from "lucide-react"
 import { toIsoDate } from "../../lib/utils"
 import type { Expense, ExpenseCategory } from "../../types/definitions"
 
@@ -47,7 +47,7 @@ export function ExpenseFormModal({ expense, onClose, onSaved }: ExpenseFormModal
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState("")
     const [receiptSourcePath, setReceiptSourcePath] = useState<string | null>(null)
-    const hasExistingReceipt = !!expense?.receiptPath
+    const [existingReceiptPath, setExistingReceiptPath] = useState<string | null>(expense?.receiptPath ?? null)
     // True when the purchase includes Quebec TPS+TVQ — auto-calculates from total
     const [taxesIncluded, setTaxesIncluded] = useState(
         editMode ? (expense!.gstPaid > 0 || expense!.qstPaid > 0) : true
@@ -82,6 +82,17 @@ export function ExpenseFormModal({ expense, onClose, onSaved }: ExpenseFormModal
         if (!checked) {
             form.setValue("gstPaid", 0)
             form.setValue("qstPaid", 0)
+        }
+    }
+
+    async function handleDeleteReceipt(): Promise<void> {
+        if (!expense?.id) return
+        if (!confirm(t("expenses.deleteReceipt"))) return
+        const result = await window.api.deleteExpenseReceipt(expense.id)
+        if (result.success) {
+            setExistingReceiptPath(null)
+        } else {
+            setError(result.error ?? t("common.error"))
         }
     }
 
@@ -239,28 +250,53 @@ export function ExpenseFormModal({ expense, onClose, onSaved }: ExpenseFormModal
 
                     <div className="space-y-1">
                         <label className="text-sm font-medium">{t("expenses.receipt")}</label>
-                        <button
-                            type="button"
-                            onClick={pickReceipt}
-                            className="border-input bg-background hover:bg-muted/50 inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm"
-                        >
-                            {receiptSourcePath ? (
-                                <>
-                                    <Check className="h-4 w-4 text-green-500" />
+                        {existingReceiptPath && !receiptSourcePath ? (
+                            <div className="border-input flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                                <Check className="h-4 w-4 flex-shrink-0 text-green-500" />
+                                <span className="min-w-0 flex-1 truncate text-xs">
+                                    {existingReceiptPath.split("/").pop()}
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => window.api.openPath(existingReceiptPath)}
+                                    className="text-muted-foreground hover:text-foreground flex h-7 w-7 flex-shrink-0 items-center justify-center rounded"
+                                    title={t("expenses.viewReceipt")}
+                                >
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleDeleteReceipt}
+                                    className="text-muted-foreground hover:text-destructive flex h-7 w-7 flex-shrink-0 items-center justify-center rounded"
+                                    title={t("expenses.deleteReceipt")}
+                                >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                            </div>
+                        ) : receiptSourcePath ? (
+                            <div className="border-input flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                                <Check className="h-4 w-4 flex-shrink-0 text-green-500" />
+                                <span className="min-w-0 flex-1 truncate text-xs">
                                     {receiptSourcePath.split("/").pop()}
-                                </>
-                            ) : hasExistingReceipt ? (
-                                <>
-                                    <Check className="h-4 w-4 text-green-500" />
-                                    {t("expenses.receiptAttached")}
-                                </>
-                            ) : (
-                                <>
-                                    <Paperclip className="h-4 w-4" />
-                                    {t("expenses.attachReceipt")}
-                                </>
-                            )}
-                        </button>
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => setReceiptSourcePath(null)}
+                                    className="text-muted-foreground hover:text-destructive flex h-7 w-7 flex-shrink-0 items-center justify-center rounded"
+                                >
+                                    <X className="h-3.5 w-3.5" />
+                                </button>
+                            </div>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={pickReceipt}
+                                className="border-input bg-background hover:bg-muted/50 inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm"
+                            >
+                                <Paperclip className="h-4 w-4" />
+                                {t("expenses.attachReceipt")}
+                            </button>
+                        )}
                     </div>
 
                     {error ? <p className="text-destructive text-sm">{error}</p> : null}

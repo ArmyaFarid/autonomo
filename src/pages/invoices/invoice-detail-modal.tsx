@@ -5,7 +5,7 @@ import { useAtomValue } from "jotai"
 import { clientsAtom } from "../../store/clientsAtom"
 import { profileAtom } from "../../store/profileAtom"
 import { formatDate, formatCurrency, cn } from "../../lib/utils"
-import type { Invoice, InvoiceLine, Payment } from "../../types/definitions"
+import type { Invoice, InvoiceLine, Payment, InvoiceAttachment } from "../../types/definitions"
 import { PaymentFormModal } from "./payment-form-modal"
 import { MarkPaidDialog } from "./mark-paid-dialog"
 
@@ -48,6 +48,7 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
     const [statusLoading, setStatusLoading] = useState(false)
     const [error, setError] = useState("")
 
+    const [attachments, setAttachments] = useState<InvoiceAttachment[]>([])
     const [paymentsData, setPaymentsData] = useState<Payment[]>([])
     const [showPaymentForm, setShowPaymentForm] = useState(false)
     const [showMarkPaid, setShowMarkPaid] = useState(false)
@@ -67,8 +68,14 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
     }, [invoice.updatedAt])
 
     useEffect(() => {
+        loadAttachments()
         loadPayments()
     }, [invoice.id])
+
+    async function loadAttachments(): Promise<void> {
+        const res = await window.api.getInvoiceAttachments(localInvoice.id)
+        if (res.success && res.data) setAttachments(res.data as InvoiceAttachment[])
+    }
 
     async function loadPayments(): Promise<void> {
         const res = await window.api.getPayments(localInvoice.id)
@@ -90,6 +97,7 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
 
     const client = clients.find((c) => c.id === localInvoice.clientId)
     const isFreeform = localInvoice.invoiceType === "freeform"
+    const isImported = localInvoice.invoiceType === "imported"
     const totalHours = localLines.reduce((sum, l) => sum + l.qty, 0)
     const totalPaid = paymentsData.reduce((sum, p) => sum + p.amount, 0)
     const remaining = Math.max(0, localInvoice.total - totalPaid)
@@ -169,7 +177,22 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
             sourcePath: (result.data as string[])[0],
             type: "hours_proof",
         })
-        if (!saveResult.success) setError(saveResult.error ?? t("common.error"))
+        if (saveResult.success) {
+            await loadAttachments()
+        } else {
+            setError(saveResult.error ?? t("common.error"))
+        }
+    }
+
+    async function handleDeleteAttachment(id: number): Promise<void> {
+        if (!confirm(t("invoices.deleteAttachment"))) return
+        setError("")
+        const result = await window.api.deleteInvoiceAttachment(id)
+        if (result.success) {
+            await loadAttachments()
+        } else {
+            setError(result.error ?? t("common.error"))
+        }
     }
 
     async function handlePaymentSaved(payment: Payment): Promise<void> {
@@ -217,8 +240,17 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
                         <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", STATUS_COLORS[status])}>
                             {statusLabel(status)}
                         </span>
-                        <span className="text-muted-foreground rounded border px-2 py-0.5 text-xs">
-                            {isFreeform ? t("invoices.typeFreeform") : t("invoices.typeWeekly")}
+                        <span className={cn(
+                            "rounded border px-2 py-0.5 text-xs",
+                            isImported
+                                ? "border-amber-300 bg-amber-50 text-amber-700"
+                                : "text-muted-foreground"
+                        )}>
+                            {isImported
+                                ? t("invoices.typeImported")
+                                : isFreeform
+                                    ? t("invoices.typeFreeform")
+                                    : t("invoices.typeWeekly")}
                         </span>
                     </div>
                     <button onClick={onClose} className="text-muted-foreground hover:text-foreground rounded p-1">
@@ -388,6 +420,54 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
                         </div>
                     ) : null}
 
+                    {/* Attachments */}
+                    <div className="space-y-2 border-t pt-4">
+                        <div className="flex items-center justify-between">
+                            <h4 className="text-sm font-semibold">{t("invoices.attachments")}</h4>
+                            {!locked ? (
+                                <button
+                                    onClick={handleAttachProof}
+                                    className="border-input bg-background hover:bg-accent inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium"
+                                >
+                                    <Plus className="h-3 w-3" />
+                                    {t("invoices.attachProof")}
+                                </button>
+                            ) : null}
+                        </div>
+                        {attachments.length === 0 ? (
+                            <p className="text-muted-foreground text-sm">{t("invoices.noAttachments")}</p>
+                        ) : (
+                            <div className="space-y-1">
+                                {attachments.map((a) => (
+                                    <div key={a.id} className="flex items-center justify-between rounded-md border px-3 py-2">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <Paperclip className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+                                            <span className="truncate text-xs">{a.name}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                                            <button
+                                                onClick={() => window.api.openPath(a.path)}
+                                                className="text-muted-foreground hover:text-foreground flex h-7 w-7 items-center justify-center rounded"
+                                                title={t("invoices.openPdf")}
+                                            >
+                                                <ExternalLink className="h-3.5 w-3.5" />
+                                            </button>
+                                            {!locked ? (
+                                                <button
+                                                    onClick={() => handleDeleteAttachment(a.id)}
+                                                    className="text-muted-foreground hover:text-destructive flex h-7 w-7 items-center justify-center rounded"
+                                                    title={t("invoices.deleteAttachment")}
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </button>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
                     {error ? <p className="text-destructive text-sm">{error}</p> : null}
                     {pdfMsg ? <p className="text-sm text-green-600">{pdfMsg}</p> : null}
                 </div>
@@ -396,7 +476,7 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
                 <div className="border-t px-6 py-4">
                     <div className="flex flex-wrap gap-2">
 
-                        {status === "draft" ? (
+                        {status === "draft" && !isImported ? (
                             <button
                                 onClick={() => onEdit(localInvoice, localLines)}
                                 className="border-input bg-background hover:bg-accent inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium"
@@ -406,7 +486,7 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
                             </button>
                         ) : null}
 
-                        {status !== "paid" && !locked ? (
+                        {status !== "paid" && !locked && !isImported ? (
                             <button
                                 onClick={handleGeneratePdf}
                                 disabled={pdfLoading}
@@ -424,16 +504,6 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
                             >
                                 <ExternalLink className="h-4 w-4" />
                                 {t("invoices.openPdf")}
-                            </button>
-                        ) : null}
-
-                        {!locked ? (
-                            <button
-                                onClick={handleAttachProof}
-                                className="border-input bg-background hover:bg-accent inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium"
-                            >
-                                <Paperclip className="h-4 w-4" />
-                                {t("invoices.attachProof")}
                             </button>
                         ) : null}
 

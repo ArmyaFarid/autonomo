@@ -1,10 +1,11 @@
 import { useState } from "react"
 import { InvoicesList } from "./invoices-list"
 import { CreateInvoiceForm } from "./create-invoice-form"
+import { ImportInvoiceForm } from "./import-invoice-form"
 import { InvoiceDetailModal } from "./invoice-detail-modal"
 import type { Invoice, InvoiceLine } from "../../types/definitions"
 
-type View = "list" | "create" | "edit"
+type View = "list" | "create" | "edit" | "import"
 
 export function InvoicesPage(): JSX.Element {
     const [view, setView] = useState<View>("list")
@@ -50,10 +51,16 @@ export function InvoicesPage(): JSX.Element {
                 <InvoicesList
                     refreshKey={listRefreshKey}
                     onNew={() => setView("create")}
+                    onImport={() => setView("import")}
                     onSelect={handleSelectInvoice}
                 />
             ) : view === "create" ? (
                 <CreateInvoiceForm
+                    onSaved={handleSaved}
+                    onCancel={handleCancelForm}
+                />
+            ) : view === "import" ? (
+                <ImportInvoiceForm
                     onSaved={handleSaved}
                     onCancel={handleCancelForm}
                 />

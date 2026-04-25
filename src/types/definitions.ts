@@ -67,7 +67,7 @@ export interface Invoice {
     issueDate: string
     periodStart: string
     periodEnd: string
-    invoiceType: "weekly" | "freeform"
+    invoiceType: "weekly" | "freeform" | "imported"
     description: string
     subtotal: number
     gstRate: number
@@ -81,6 +81,15 @@ export interface Invoice {
     pdfPath: string | null
     createdAt: string
     updatedAt: string
+}
+
+export interface InvoiceAttachment {
+    id: number
+    invoiceId: number
+    name: string
+    path: string
+    type: string
+    createdAt: string
 }
 
 export interface Payment {
