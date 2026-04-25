@@ -34,10 +34,24 @@ type InvoiceInput = {
     notes?: string | null
 }
 
-function generateInvoiceNumber(format: string, startNumber: number, existingCount: number): string {
+function generateInvoiceNumber(format: string, startNumber: number, existingNumbers: string[]): string {
     const year = new Date().getFullYear().toString()
-    const num = (startNumber + existingCount).toString().padStart(3, "0")
-    return format.replace("YYYY", year).replace("NNN", num)
+    // Build the fixed prefix for the current year (everything before the N-block)
+    // e.g. "YYYY-NNN" → "2026-", "FACNNN-YYYY" → "FAC" + year suffix varies, so we keep it simple
+    const nMatch = format.match(/N+/)
+    const padLen = nMatch ? nMatch[0].length : 3
+    const prefix = format.replace("YYYY", year).replace(/N+.*$/, "")
+
+    let maxSeq = startNumber - 1
+    for (const n of existingNumbers) {
+        if (n.startsWith(prefix)) {
+            const seq = parseInt(n.slice(prefix.length), 10)
+            if (!isNaN(seq) && seq > maxSeq) maxSeq = seq
+        }
+    }
+
+    const next = Math.max(startNumber, maxSeq + 1)
+    return format.replace("YYYY", year).replace(/N+/, next.toString().padStart(padLen, "0"))
 }
 
 function getLines(invoiceId: number) {
@@ -81,10 +95,10 @@ export function registerInvoiceHandlers(): void {
         try {
             const db = getDb()
             const prof = db.select().from(profile).limit(1).all()
-            const allInvoices = db.select().from(invoices).all()
+            const allNumbers = db.select({ number: invoices.number }).from(invoices).all().map((i) => i.number)
             const format = prof[0]?.invoiceNumberFormat ?? "YYYY-NNN"
             const start = prof[0]?.invoiceStartNumber ?? 1
-            const number = generateInvoiceNumber(format, start, allInvoices.length)
+            const number = generateInvoiceNumber(format, start, allNumbers)
             return { success: true, data: number }
         } catch (error) {
             return { success: false, error: String(error) }
