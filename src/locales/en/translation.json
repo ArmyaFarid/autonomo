@@ -47,6 +47,7 @@
         "error": "Error",
         "success": "Success",
         "confirm": "Confirm",
+        "optional": "optional",
         "back": "Back",
         "close": "Close",
         "yes": "Yes",
@@ -306,6 +307,7 @@
         "reference": "Reference",
         "notes": "Notes",
         "proof": "Attach proof",
+        "referencePlaceholder": "Transaction #, cheque #...",
         "proofAttached": "Proof attached",
         "methods": {
             "wire": "Wire transfer",

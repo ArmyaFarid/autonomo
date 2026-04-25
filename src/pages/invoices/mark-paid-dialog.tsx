@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { X } from "lucide-react"
+import { X, Paperclip, Check } from "lucide-react"
 import { useAtomValue } from "jotai"
 import { profileAtom } from "../../store/profileAtom"
 import { formatCurrency } from "../../lib/utils"
@@ -24,8 +24,21 @@ export function MarkPaidDialog({ invoice, remaining, onClose, onSaved }: MarkPai
 
     const [method, setMethod] = useState<"wire" | "cheque" | "interac" | "other">("wire")
     const [paymentDate, setPaymentDate] = useState(toIsoDate(new Date()))
+    const [reference, setReference] = useState("")
+    const [proofPath, setProofPath] = useState<string | null>(null)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState("")
+
+    async function pickProof(): Promise<void> {
+        const result = await window.api.openFileDialog({
+            title: t("payments.proof"),
+            properties: ["openFile"],
+            filters: [{ name: "Documents", extensions: ["pdf", "png", "jpg", "jpeg"] }],
+        })
+        if (result.success && (result.data as string[])?.[0]) {
+            setProofPath((result.data as string[])[0])
+        }
+    }
 
     async function handleConfirm(): Promise<void> {
         setLoading(true)
@@ -35,14 +48,19 @@ export function MarkPaidDialog({ invoice, remaining, onClose, onSaved }: MarkPai
             paymentDate,
             amount: remaining,
             paymentMethod: method,
+            reference: reference.trim() || null,
         })
         if (!result.success) {
             setError(result.error ?? t("common.error"))
             setLoading(false)
             return
         }
+        const saved = result.data as Payment
+        if (proofPath) {
+            await window.api.addPaymentProof({ paymentId: saved.id, invoiceId: invoice.id, sourcePath: proofPath })
+        }
         setLoading(false)
-        onSaved(result.data as Payment)
+        onSaved(saved)
     }
 
     return (
@@ -83,6 +101,49 @@ export function MarkPaidDialog({ invoice, remaining, onClose, onSaved }: MarkPai
                             <option value="interac">{t("payments.methods.interac")}</option>
                             <option value="other">{t("payments.methods.other")}</option>
                         </select>
+                    </div>
+
+                    <div className="space-y-1">
+                        <label className="text-sm font-medium">
+                            {t("payments.reference")}
+                            <span className="text-muted-foreground ml-1 font-normal text-xs">({t("common.optional")})</span>
+                        </label>
+                        <input
+                            type="text"
+                            value={reference}
+                            onChange={(e) => setReference(e.target.value)}
+                            placeholder={t("payments.referencePlaceholder")}
+                            className={inputCn}
+                        />
+                    </div>
+
+                    <div className="space-y-1">
+                        <label className="text-sm font-medium">
+                            {t("payments.proof")}
+                            <span className="text-muted-foreground ml-1 font-normal text-xs">({t("common.optional")})</span>
+                        </label>
+                        {proofPath ? (
+                            <div className="border-input flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                                <Check className="h-4 w-4 flex-shrink-0 text-green-500" />
+                                <span className="min-w-0 flex-1 truncate text-xs">{proofPath.split("/").pop()}</span>
+                                <button
+                                    type="button"
+                                    onClick={() => setProofPath(null)}
+                                    className="text-muted-foreground hover:text-destructive flex h-6 w-6 flex-shrink-0 items-center justify-center rounded"
+                                >
+                                    <X className="h-3 w-3" />
+                                </button>
+                            </div>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={pickProof}
+                                className="border-input bg-background hover:bg-muted/50 inline-flex h-9 w-full items-center gap-2 rounded-md border px-3 text-sm"
+                            >
+                                <Paperclip className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                                <span className="text-muted-foreground">{t("payments.proof")}</span>
+                            </button>
+                        )}
                     </div>
 
                     {error ? <p className="text-destructive text-sm">{error}</p> : null}

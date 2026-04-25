@@ -47,6 +47,7 @@
         "error": "Erreur",
         "success": "Succès",
         "confirm": "Confirmer",
+        "optional": "optionnel",
         "back": "Retour",
         "close": "Fermer",
         "yes": "Oui",
@@ -306,6 +307,7 @@
         "reference": "Référence",
         "notes": "Notes",
         "proof": "Joindre une preuve",
+        "referencePlaceholder": "N° de transaction, chèque...",
         "proofAttached": "Preuve jointe",
         "methods": {
             "wire": "Virement bancaire",
