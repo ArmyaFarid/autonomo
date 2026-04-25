@@ -327,6 +327,7 @@
     "backup": {
         "created": "Backup created",
         "createdDesc": "Your backup was created successfully.",
+        "autoCreated": "Automatic backup created.",
         "error": "Backup error",
         "restored": "Backup restored",
         "restoredDesc": "Your data was restored successfully."

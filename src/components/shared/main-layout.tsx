@@ -7,10 +7,12 @@ import {
     Receipt,
     BarChart3,
     Settings,
+    CheckCircle,
 } from "lucide-react"
 import { cn } from "../../lib/utils"
-import { useSetAtom } from "jotai"
+import { useSetAtom, useAtom } from "jotai"
 import { clientsAtom } from "../../store/clientsAtom"
+import { backupToastAtom } from "../../store/profileAtom"
 import type { Client } from "../../types/definitions"
 import { DashboardPage } from "../../pages/dashboard/dashboard-page"
 import { ClientsPage } from "../../pages/clients/clients-page"
@@ -38,12 +40,20 @@ export function MainLayout(): JSX.Element {
     const { t } = useTranslation()
     const [activePage, setActivePage] = useState("dashboard")
     const setClients = useSetAtom(clientsAtom)
+    const [backupToastKey, setBackupToastKey] = useAtom(backupToastAtom)
 
     useEffect(() => {
         window.api.getClients().then((res) => {
             if (res.success && res.data) setClients(res.data as Client[])
         })
     }, [])
+
+    // Auto-dismiss backup toast after 5 seconds
+    useEffect(() => {
+        if (!backupToastKey) return
+        const timer = setTimeout(() => setBackupToastKey(null), 5000)
+        return () => clearTimeout(timer)
+    }, [backupToastKey])
 
     function renderPage(): JSX.Element {
         switch (activePage) {
@@ -99,6 +109,13 @@ export function MainLayout(): JSX.Element {
             <main className="flex-1 overflow-auto">
                 {renderPage()}
             </main>
+
+            {backupToastKey ? (
+                <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 shadow-md">
+                    <CheckCircle className="h-4 w-4 flex-shrink-0 text-green-600" />
+                    <span>{t(backupToastKey)}</span>
+                </div>
+            ) : null}
         </div>
     )
 }

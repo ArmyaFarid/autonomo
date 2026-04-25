@@ -1,5 +1,5 @@
 import { ipcMain } from "electron"
-import { getDataRootPath } from "../../db/schema"
+import { getDataRootPath, getDb, profile as profileTable } from "../../db/schema"
 import { join } from "path"
 import { existsSync, mkdirSync, readdirSync, unlinkSync, statSync } from "fs"
 import AdmZip from "adm-zip"
@@ -23,34 +23,72 @@ function computeChecksum(filePath: string): string {
     return createHash("sha256").update(content).digest("hex")
 }
 
+function createBackupZip(backupsDir: string, retentionCount: number): string {
+    if (!existsSync(backupsDir)) mkdirSync(backupsDir, { recursive: true })
+
+    const date = new Date().toISOString().split("T")[0]
+    const zipPath = join(backupsDir, `armya-backup-${date}.zip`)
+
+    const zip = new AdmZip()
+    const dbPath = getDbPath()
+    if (existsSync(dbPath)) zip.addLocalFile(dbPath)
+
+    const attachmentsPath = getAttachmentsPath()
+    if (existsSync(attachmentsPath)) zip.addLocalFolder(attachmentsPath, "attachments")
+
+    const manifest = {
+        appVersion: "0.1.0",
+        date: new Date().toISOString(),
+        schemaVersion: 1,
+        checksum: existsSync(dbPath) ? computeChecksum(dbPath) : "",
+    }
+    zip.addFile("manifest.json", Buffer.from(JSON.stringify(manifest, null, 2)))
+    zip.writeZip(zipPath)
+
+    pruneOldBackups(backupsDir, retentionCount)
+    return zipPath
+}
+
 export function registerBackupHandlers(): void {
     ipcMain.handle("backup:create", () => {
         try {
-            const backupsDir = getBackupsDir()
-            if (!existsSync(backupsDir)) mkdirSync(backupsDir, { recursive: true })
-
-            const date = new Date().toISOString().split("T")[0]
-            const zipPath = join(backupsDir, `armya-backup-${date}.zip`)
-
-            const zip = new AdmZip()
-            const dbPath = getDbPath()
-            if (existsSync(dbPath)) zip.addLocalFile(dbPath)
-
-            const attachmentsPath = getAttachmentsPath()
-            if (existsSync(attachmentsPath)) zip.addLocalFolder(attachmentsPath, "attachments")
-
-            const manifest = {
-                appVersion: "0.1.0",
-                date: new Date().toISOString(),
-                schemaVersion: 1,
-                checksum: existsSync(dbPath) ? computeChecksum(dbPath) : "",
-            }
-            zip.addFile("manifest.json", Buffer.from(JSON.stringify(manifest, null, 2)))
-            zip.writeZip(zipPath)
-
-            pruneOldBackups(backupsDir, 10)
-
+            const db = getDb()
+            const prof = db.select().from(profileTable).limit(1).all()[0]
+            const retention = prof?.backupRetentionCount ?? 10
+            const zipPath = createBackupZip(getBackupsDir(), retention)
             return { success: true, data: zipPath }
+        } catch (error) {
+            return { success: false, error: String(error) }
+        }
+    })
+
+    ipcMain.handle("backup:checkAuto", () => {
+        try {
+            const db = getDb()
+            const prof = db.select().from(profileTable).limit(1).all()[0]
+            if (!prof) return { success: true, data: { created: false } }
+
+            const intervalDays = prof.backupIntervalDays ?? 7
+            const retention = prof.backupRetentionCount ?? 10
+            const backupsDir = getBackupsDir()
+
+            // Find the most recent backup
+            let lastBackupMs = 0
+            if (existsSync(backupsDir)) {
+                const zips = readdirSync(backupsDir).filter((f) => f.endsWith(".zip"))
+                for (const f of zips) {
+                    const mtime = statSync(join(backupsDir, f)).mtime.getTime()
+                    if (mtime > lastBackupMs) lastBackupMs = mtime
+                }
+            }
+
+            const daysSinceLast = (Date.now() - lastBackupMs) / 86400000
+            if (lastBackupMs > 0 && daysSinceLast < intervalDays) {
+                return { success: true, data: { created: false } }
+            }
+
+            const zipPath = createBackupZip(backupsDir, retention)
+            return { success: true, data: { created: true, path: zipPath } }
         } catch (error) {
             return { success: false, error: String(error) }
         }
@@ -95,7 +133,7 @@ export function registerBackupHandlers(): void {
     })
 }
 
-function pruneOldBackups(dir: string, keep: number): void {
+export function pruneOldBackups(dir: string, keep: number): void {
     const files = readdirSync(dir)
         .filter((f) => f.endsWith(".zip"))
         .map((f) => ({ name: f, mtime: statSync(join(dir, f)).mtime.getTime() }))

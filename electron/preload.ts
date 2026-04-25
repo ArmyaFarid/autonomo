@@ -50,6 +50,7 @@ const api = {
 
     // Backup
     createBackup: () => ipcRenderer.invoke("backup:create"),
+    checkAutoBackup: () => ipcRenderer.invoke("backup:checkAuto"),
     restoreBackup: (zipPath: string) => ipcRenderer.invoke("backup:restore", zipPath),
     listBackups: () => ipcRenderer.invoke("backup:list"),
 

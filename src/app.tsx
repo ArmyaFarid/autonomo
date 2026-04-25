@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { useAtom, useSetAtom } from "jotai"
 import { useTranslation } from "react-i18next"
-import { profileAtom, isFirstLaunchAtom, appReadyAtom } from "./store/profileAtom"
+import { profileAtom, isFirstLaunchAtom, appReadyAtom, backupToastAtom } from "./store/profileAtom"
 import { FirstLaunchPage } from "./pages/first-launch/first-launch-page"
 import { MainLayout } from "./components/shared/main-layout"
 import i18n from "./lib/i18n"
@@ -11,6 +11,7 @@ export function App(): JSX.Element {
     const [profile, setProfile] = useAtom(profileAtom)
     const [isFirstLaunch, setIsFirstLaunch] = useAtom(isFirstLaunchAtom)
     const [appReady, setAppReady] = useAtom(appReadyAtom)
+    const setBackupToast = useSetAtom(backupToastAtom)
 
     useEffect(() => {
         async function init(): Promise<void> {
@@ -30,6 +31,12 @@ export function App(): JSX.Element {
             }
 
             setAppReady(true)
+
+            // Auto-backup check runs after UI is ready so it doesn't block startup
+            const backupRes = await window.api.checkAutoBackup()
+            if (backupRes.success && (backupRes.data as { created: boolean }).created) {
+                setBackupToast("backup.autoCreated")
+            }
         }
 
         init().catch((err) => {
