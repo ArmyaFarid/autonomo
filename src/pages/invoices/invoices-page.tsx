@@ -3,9 +3,12 @@ import { InvoicesList } from "./invoices-list"
 import { CreateInvoiceForm } from "./create-invoice-form"
 import { ImportInvoiceForm } from "./import-invoice-form"
 import { InvoiceDetailModal } from "./invoice-detail-modal"
+import { InvoiceNewChoice } from "./invoice-new-choice"
+import { InvoiceSplitEditor } from "./editor/invoice-split-editor"
+import { InvoiceInlineEditor } from "./editor/invoice-inline-editor"
 import type { Invoice, InvoiceLine } from "../../types/definitions"
 
-type View = "list" | "create" | "edit" | "import"
+type View = "list" | "choose" | "create" | "edit" | "import" | "editor-split" | "editor-inline"
 
 export function InvoicesPage(): JSX.Element {
     const [view, setView] = useState<View>("list")
@@ -45,33 +48,59 @@ export function InvoicesPage(): JSX.Element {
         }
     }
 
+    function renderMain(): JSX.Element {
+        switch (view) {
+            case "choose":
+                return (
+                    <InvoiceNewChoice
+                        onBack={() => setView("list")}
+                        onForm={() => setView("create")}
+                        onSplitView={() => setView("editor-split")}
+                        onInline={() => setView("editor-inline")}
+                    />
+                )
+            case "create":
+                return (
+                    <CreateInvoiceForm
+                        onSaved={handleSaved}
+                        onCancel={() => setView("choose")}
+                    />
+                )
+            case "edit":
+                return (
+                    <CreateInvoiceForm
+                        invoice={editingInvoice ?? undefined}
+                        invoiceLines={editingLines}
+                        onSaved={handleSaved}
+                        onCancel={handleCancelForm}
+                    />
+                )
+            case "import":
+                return (
+                    <ImportInvoiceForm
+                        onSaved={handleSaved}
+                        onCancel={handleCancelForm}
+                    />
+                )
+            case "editor-split":
+                return <InvoiceSplitEditor onBack={() => setView("choose")} />
+            case "editor-inline":
+                return <InvoiceInlineEditor onBack={() => setView("choose")} />
+            default:
+                return (
+                    <InvoicesList
+                        refreshKey={listRefreshKey}
+                        onNew={() => setView("choose")}
+                        onImport={() => setView("import")}
+                        onSelect={handleSelectInvoice}
+                    />
+                )
+        }
+    }
+
     return (
         <>
-            {view === "list" ? (
-                <InvoicesList
-                    refreshKey={listRefreshKey}
-                    onNew={() => setView("create")}
-                    onImport={() => setView("import")}
-                    onSelect={handleSelectInvoice}
-                />
-            ) : view === "create" ? (
-                <CreateInvoiceForm
-                    onSaved={handleSaved}
-                    onCancel={handleCancelForm}
-                />
-            ) : view === "import" ? (
-                <ImportInvoiceForm
-                    onSaved={handleSaved}
-                    onCancel={handleCancelForm}
-                />
-            ) : (
-                <CreateInvoiceForm
-                    invoice={editingInvoice ?? undefined}
-                    invoiceLines={editingLines}
-                    onSaved={handleSaved}
-                    onCancel={handleCancelForm}
-                />
-            )}
+            {renderMain()}
 
             {selectedInvoice ? (
                 <InvoiceDetailModal

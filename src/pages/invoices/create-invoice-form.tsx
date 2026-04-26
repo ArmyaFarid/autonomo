@@ -1,14 +1,16 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { ChevronLeft, Plus, Trash2, X } from "lucide-react"
+import { ChevronLeft, Columns2, Plus, Trash2, X } from "lucide-react"
 import { useAtomValue } from "jotai"
 import { clientsAtom } from "../../store/clientsAtom"
 import { profileAtom } from "../../store/profileAtom"
 import { toIsoDate, formatDate, cn } from "../../lib/utils"
 import type { Client, Invoice, InvoiceLine } from "../../types/definitions"
+import { buildPreviewHtml } from "./editor/preview-builder"
+import type { PreviewLine } from "./editor/preview-builder"
 
 const GST_RATE = 0.05
 const QST_RATE = 0.09975
@@ -174,10 +176,14 @@ export function CreateInvoiceForm({ invoice, invoiceLines: editLines, onSaved, o
         },
     })
 
+    const [showPreview, setShowPreview] = useState(false)
+
     const { watch, setValue } = form
     const clientId = watch("clientId")
     const periodStart = watch("periodStart")
     const periodEnd = watch("periodEnd")
+    const issueDate = watch("issueDate")
+    const description = watch("description")
     const freeformTotalHours = watch("freeformTotalHours")
     const enableGst = watch("enableGst")
     const enableQst = watch("enableQst")
@@ -380,19 +386,85 @@ export function CreateInvoiceForm({ invoice, invoiceLines: editLines, onSaved, o
     const fmt = (n: number): string =>
         locale.startsWith("en") ? `$${n.toFixed(2)}` : `${n.toFixed(2).replace(".", ",")} $`
 
-    return (
-        <div className="mx-auto max-w-2xl p-8">
-            <div className="mb-6 flex items-center gap-3">
-                <button onClick={onCancel} className="text-muted-foreground hover:text-foreground rounded p-1">
-                    <ChevronLeft className="h-5 w-5" />
-                </button>
-                <div>
-                    <h2 className="text-2xl font-semibold">
-                        {editMode ? t("invoices.edit") : t("invoices.new")}
-                    </h2>
-                    <p className="text-muted-foreground text-sm">N° {nextNumber}</p>
-                </div>
+    const selectedClient = useMemo(
+        () => activeClients.find((c) => c.id === Number(clientId)) ?? null,
+        [clientId, activeClients]
+    )
+
+    const previewLines = useMemo((): PreviewLine[] => {
+        if (invoiceType === "weekly") {
+            return weekRows.map((w, i) => ({
+                label: `${t("invoices.weekLabel")} ${i + 1}`,
+                description: `${w.start} – ${w.end}`,
+                qty: w.hours,
+                unitPrice: weeklyRate,
+                amount: w.hours * weeklyRate,
+            }))
+        }
+        return freeformRows.map((r) => ({
+            label: r.label,
+            description: r.description,
+            qty: r.qty,
+            unitPrice: r.unitPrice,
+            amount: r.amount,
+        }))
+    }, [invoiceType, weekRows, freeformRows, weeklyRate])
+
+    const previewHtml = useMemo(() => {
+        if (!showPreview) return ""
+        return buildPreviewHtml({
+            profile,
+            client: selectedClient,
+            number: nextNumber,
+            issueDate,
+            dueDate,
+            periodStart,
+            periodEnd,
+            invoiceType,
+            description,
+            lines: previewLines,
+            subtotal,
+            gstAmount,
+            qstAmount,
+            total,
+            locale,
+        })
+    }, [showPreview, selectedClient, nextNumber, issueDate, dueDate, periodStart, periodEnd, invoiceType, description, previewLines, subtotal, gstAmount, qstAmount, total])
+
+    const header = (
+        <div className="mb-6 flex items-center gap-3">
+            <button onClick={onCancel} className="text-muted-foreground hover:text-foreground rounded p-1">
+                <ChevronLeft className="h-5 w-5" />
+            </button>
+            <div className="flex-1">
+                <h2 className="text-2xl font-semibold">
+                    {editMode ? t("invoices.edit") : t("invoices.new")}
+                </h2>
+                <p className="text-muted-foreground text-sm">N° {nextNumber}</p>
             </div>
+            {!editMode ? (
+                <button
+                    type="button"
+                    onClick={() => setShowPreview((v) => !v)}
+                    title="Aperçu en direct"
+                    className={cn(
+                        "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors",
+                        showPreview
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-input bg-background text-muted-foreground hover:text-foreground"
+                    )}
+                >
+                    <Columns2 className="h-4 w-4" />
+                    Aperçu
+                </button>
+            ) : null}
+        </div>
+    )
+
+    return (
+        <div className={showPreview ? "flex h-screen overflow-hidden" : ""}>
+            <div className={showPreview ? "w-[580px] shrink-0 overflow-y-auto p-8" : "mx-auto max-w-2xl p-8"}>
+                {header}
 
             <form className="space-y-6">
                 {/* Client + date */}
@@ -721,6 +793,17 @@ export function CreateInvoiceForm({ invoice, invoiceLines: editLines, onSaved, o
                     </button>
                 </div>
             </form>
+            </div>
+            {showPreview ? (
+                <div className="flex-1 bg-muted/30">
+                    <iframe
+                        srcDoc={previewHtml}
+                        className="h-full w-full border-0"
+                        sandbox="allow-same-origin"
+                        title="Aperçu facture"
+                    />
+                </div>
+            ) : null}
         </div>
     )
 }
