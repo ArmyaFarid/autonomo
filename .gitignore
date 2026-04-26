@@ -49,3 +49,6 @@ node_modules/.vite/
 
 # Coverage (if tests exist)
 coverage/
+
+# Dev environment data (local SQLite + attachments, never commit)
+dev-data/

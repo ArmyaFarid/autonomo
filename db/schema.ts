@@ -4,6 +4,7 @@ import Database from "better-sqlite3"
 import { join } from "path"
 import { app } from "electron"
 import { existsSync, mkdirSync } from "fs"
+import { is } from "@electron-toolkit/utils"
 
 export const profile = sqliteTable("profile", {
     id: integer("id").primaryKey(),
@@ -134,6 +135,7 @@ let dbInstance: ReturnType<typeof drizzle> | null = null
 let rawDb: Database.Database | null = null
 
 export function getDataRootPath(): string {
+    if (is.dev) return join(app.getAppPath(), "dev-data")
     const documentsPath = app.getPath("documents")
     return join(documentsPath, "ArmyaFacturation")
 }
