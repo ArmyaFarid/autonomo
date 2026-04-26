@@ -15,7 +15,8 @@
         "restore": "Restaurer une sauvegarde",
         "restoreDesc": "Restaurer vos données à partir d'un fichier de sauvegarde .zip existant.",
         "startNew": "Commencer",
-        "startRestore": "Choisir une sauvegarde"
+        "startRestore": "Choisir une sauvegarde",
+        "relaunch": "Relancer l'application"
     },
     "setup": {
         "title": "Configuration du profil",
@@ -35,7 +36,11 @@
         "city": "Ville",
         "province": "Province / Territoire",
         "country": "Pays",
-        "postalCode": "Code postal"
+        "postalCode": "Code postal",
+        "pinTitle": "Sécurité (optionnel)",
+        "pinSubtitle": "Protégez l'accès à l'application avec un code PIN. Vous pourrez le modifier à tout moment dans Paramètres → Sécurité.",
+        "pinSkip": "Passer cette étape",
+        "finish": "Terminer"
     },
     "common": {
         "save": "Enregistrer",
@@ -297,7 +302,31 @@
         "gstNumber": "Numéro TPS",
         "qstNumber": "Numéro TVQ",
         "invoiceStartNumber": "Numéro de départ",
-        "invoiceFormatHint": "YYYY = année · NNN = numéro séquentiel"
+        "invoiceFormatHint": "YYYY = année · NNN = numéro séquentiel",
+        "security": "Sécurité",
+        "preferences": "Préférences",
+        "exportBackup": "Exporter une sauvegarde"
+    },
+    "security": {
+        "enabled": "Code PIN activé",
+        "disabled": "Code PIN désactivé",
+        "enable": "Activer un code PIN",
+        "disable": "Désactiver le code PIN",
+        "change": "Changer le code PIN",
+        "newPin": "Nouveau code PIN",
+        "confirmPin": "Confirmer le code PIN",
+        "currentPin": "Code PIN actuel",
+        "pinTooShort": "Le code PIN doit contenir au moins 4 caractères",
+        "pinMismatch": "Les codes PIN ne correspondent pas",
+        "wrongPin": "Code PIN incorrect",
+        "disableConfirm": "Saisissez votre code PIN actuel pour désactiver le verrouillage.",
+        "enterPin": "Entrez votre code PIN pour déverrouiller l'application.",
+        "pinPlaceholder": "••••",
+        "unlock": "Déverrouiller",
+        "touchIdLabel": "Touch ID",
+        "touchIdHint": "Déverrouillez l'application avec votre empreinte digitale.",
+        "touchId": "Touch ID",
+        "touchIdFailed": "Touch ID échoué — entrez votre code PIN."
     },
     "payments": {
         "title": "Paiements",
@@ -328,9 +357,11 @@
         "created": "Sauvegarde créée",
         "createdDesc": "Votre sauvegarde a été créée avec succès.",
         "autoCreated": "Sauvegarde automatique créée.",
+        "restoreConfirm": "Cela remplacera toutes vos données. Confirmer ?",
         "error": "Erreur de sauvegarde",
         "restored": "Sauvegarde restaurée",
-        "restoredDesc": "Vos données ont été restaurées avec succès."
+        "restoredDesc": "Vos données ont été restaurées avec succès.",
+        "exportedDesc": "Sauvegarde exportée avec succès."
     },
     "toast": {
         "savedSuccess": "Enregistré avec succès",

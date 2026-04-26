@@ -9,6 +9,8 @@ export const profile = sqliteTable("profile", {
     id: integer("id").primaryKey(),
     name: text("name").notNull(),
     address: text("address").notNull(),
+    appPin: text("app_pin"),
+    touchIdEnabled: integer("touch_id_enabled").notNull().default(0),
     phone: text("phone"),
     email: text("email"),
     gstNumber: text("gst_number"),
@@ -24,7 +26,7 @@ export const profile = sqliteTable("profile", {
     logoPath: text("logo_path"),
     locale: text("locale").notNull().default("fr-CA"),
     backupIntervalDays: integer("backup_interval_days").notNull().default(7),
-    backupRetentionCount: integer("backup_retention_count").notNull().default(10),
+    backupRetentionCount: integer("backup_retention_count").notNull().default(1),
     lateInvoiceAlertDays: integer("late_invoice_alert_days").notNull().default(30),
     taxReserveRate: real("tax_reserve_rate").notNull().default(0.20),
     createdAt: text("created_at").notNull(),
@@ -136,7 +138,7 @@ export function getDataRootPath(): string {
     return join(documentsPath, "ArmyaFacturation")
 }
 
-export function initDatabase(): void {
+export function initDatabase(skipStaleCleanup = false): void {
     const dataPath = getDataRootPath()
     if (!existsSync(dataPath)) {
         mkdirSync(dataPath, { recursive: true })
@@ -148,7 +150,7 @@ export function initDatabase(): void {
     rawDb.pragma("foreign_keys = ON")
 
     dbInstance = drizzle(rawDb)
-    runMigrations(rawDb)
+    runMigrations(rawDb, skipStaleCleanup)
 }
 
 export function getDb(): ReturnType<typeof drizzle> {
@@ -161,7 +163,20 @@ export function getRawDb(): Database.Database {
     return rawDb
 }
 
-function runMigrations(db: Database.Database): void {
+export function closeDatabase(): void {
+    if (rawDb) {
+        rawDb.close()
+        rawDb = null
+        dbInstance = null
+    }
+}
+
+export function reinitDatabase(): void {
+    closeDatabase()
+    initDatabase(true)
+}
+
+function runMigrations(db: Database.Database, skipStaleCleanup = false): void {
     db.exec(`
         CREATE TABLE IF NOT EXISTS profile (
             id INTEGER PRIMARY KEY,
@@ -182,7 +197,7 @@ function runMigrations(db: Database.Database): void {
             logo_path TEXT,
             locale TEXT NOT NULL DEFAULT 'fr-CA',
             backup_interval_days INTEGER NOT NULL DEFAULT 7,
-            backup_retention_count INTEGER NOT NULL DEFAULT 10,
+            backup_retention_count INTEGER NOT NULL DEFAULT 1,
             late_invoice_alert_days INTEGER NOT NULL DEFAULT 30,
             tax_reserve_rate REAL NOT NULL DEFAULT 0.20,
             created_at TEXT NOT NULL,
@@ -287,12 +302,16 @@ function runMigrations(db: Database.Database): void {
         `ALTER TABLE profile ADD COLUMN postal_code TEXT`,
         `ALTER TABLE profile ADD COLUMN tax_reserve_rate REAL NOT NULL DEFAULT 0.20`,
         `ALTER TABLE invoices ADD COLUMN due_date TEXT`,
+        `ALTER TABLE profile ADD COLUMN app_pin TEXT`,
+        `ALTER TABLE profile ADD COLUMN touch_id_enabled INTEGER NOT NULL DEFAULT 0`,
     ]) {
         try { db.exec(sql) } catch { /* already exists */ }
     }
 
     // overdue is now computed — convert any stored 'overdue' rows to 'sent'
     db.exec("UPDATE invoices SET status = 'sent' WHERE status = 'overdue'")
+
+    if (skipStaleCleanup) return
 
     // Stale path cleanup — NULL/delete records pointing to files that no longer exist on disk.
     // Runs every startup, safe because it only touches missing files.

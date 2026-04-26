@@ -15,7 +15,8 @@
         "restore": "Restore from backup",
         "restoreDesc": "Restore your data from an existing .zip backup file.",
         "startNew": "Get started",
-        "startRestore": "Choose a backup"
+        "startRestore": "Choose a backup",
+        "relaunch": "Relaunch the app"
     },
     "setup": {
         "title": "Profile setup",
@@ -35,7 +36,11 @@
         "city": "City",
         "province": "Province / Territory",
         "country": "Country",
-        "postalCode": "Postal code"
+        "postalCode": "Postal code",
+        "pinTitle": "Security (optional)",
+        "pinSubtitle": "Protect access to the app with a PIN. You can change it at any time in Settings → Security.",
+        "pinSkip": "Skip this step",
+        "finish": "Finish"
     },
     "common": {
         "save": "Save",
@@ -297,7 +302,31 @@
         "gstNumber": "GST number",
         "qstNumber": "QST number",
         "invoiceStartNumber": "Starting number",
-        "invoiceFormatHint": "YYYY = year · NNN = sequential number"
+        "invoiceFormatHint": "YYYY = year · NNN = sequential number",
+        "security": "Security",
+        "preferences": "Preferences",
+        "exportBackup": "Export backup"
+    },
+    "security": {
+        "enabled": "PIN lock enabled",
+        "disabled": "PIN lock disabled",
+        "enable": "Enable PIN lock",
+        "disable": "Disable PIN lock",
+        "change": "Change PIN",
+        "newPin": "New PIN",
+        "confirmPin": "Confirm PIN",
+        "currentPin": "Current PIN",
+        "pinTooShort": "PIN must be at least 4 characters",
+        "pinMismatch": "PINs do not match",
+        "wrongPin": "Incorrect PIN",
+        "disableConfirm": "Enter your current PIN to disable the lock screen.",
+        "enterPin": "Enter your PIN to unlock the application.",
+        "pinPlaceholder": "••••",
+        "unlock": "Unlock",
+        "touchIdLabel": "Touch ID",
+        "touchIdHint": "Unlock the app with your fingerprint.",
+        "touchId": "Touch ID",
+        "touchIdFailed": "Touch ID failed — enter your PIN."
     },
     "payments": {
         "title": "Payments",
@@ -328,9 +357,11 @@
         "created": "Backup created",
         "createdDesc": "Your backup was created successfully.",
         "autoCreated": "Automatic backup created.",
+        "restoreConfirm": "This will replace all your current data. Confirm?",
         "error": "Backup error",
         "restored": "Backup restored",
-        "restoredDesc": "Your data was restored successfully."
+        "restoredDesc": "Your data was restored successfully.",
+        "exportedDesc": "Backup exported successfully."
     },
     "toast": {
         "savedSuccess": "Saved successfully",

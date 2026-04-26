@@ -1,9 +1,10 @@
 import { useEffect } from "react"
 import { useAtom, useSetAtom } from "jotai"
 import { useTranslation } from "react-i18next"
-import { profileAtom, isFirstLaunchAtom, appReadyAtom, backupToastAtom } from "./store/profileAtom"
+import { profileAtom, isFirstLaunchAtom, appReadyAtom, backupToastAtom, isLockedAtom } from "./store/profileAtom"
 import { FirstLaunchPage } from "./pages/first-launch/first-launch-page"
 import { MainLayout } from "./components/shared/main-layout"
+import { LockScreen } from "./pages/lock/lock-screen"
 import i18n from "./lib/i18n"
 
 export function App(): JSX.Element {
@@ -12,6 +13,7 @@ export function App(): JSX.Element {
     const [isFirstLaunch, setIsFirstLaunch] = useAtom(isFirstLaunchAtom)
     const [appReady, setAppReady] = useAtom(appReadyAtom)
     const setBackupToast = useSetAtom(backupToastAtom)
+    const [isLocked, setIsLocked] = useAtom(isLockedAtom)
 
     useEffect(() => {
         async function init(): Promise<void> {
@@ -28,6 +30,7 @@ export function App(): JSX.Element {
                 const locale = profileRes.data.locale ?? "fr"
                 const lang = locale.startsWith("en") ? "en" : "fr"
                 await i18nInstance.changeLanguage(lang)
+                if (profileRes.data.appPin) setIsLocked(true)
             }
 
             setAppReady(true)
@@ -51,6 +54,10 @@ export function App(): JSX.Element {
                 <div className="text-muted-foreground text-sm">Chargement...</div>
             </div>
         )
+    }
+
+    if (isLocked) {
+        return <LockScreen onUnlock={() => setIsLocked(false)} touchIdEnabled={!!profile?.touchIdEnabled} />
     }
 
     if (isFirstLaunch) {

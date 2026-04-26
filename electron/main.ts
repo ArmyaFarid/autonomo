@@ -1,7 +1,7 @@
 import { app, BrowserWindow, shell, ipcMain } from "electron"
 import { join } from "path"
 import { electronApp, optimizer, is } from "@electron-toolkit/utils"
-import { initDatabase } from "../db/schema"
+import { initDatabase, closeDatabase } from "../db/schema"
 import { registerClientHandlers } from "./ipc/clients"
 import { registerInvoiceHandlers } from "./ipc/invoices"
 import { registerExpenseHandlers } from "./ipc/expenses"
@@ -66,6 +66,10 @@ app.whenReady().then(() => {
     app.on("activate", function () {
         if (BrowserWindow.getAllWindows().length === 0) createWindow()
     })
+})
+
+app.on("before-quit", () => {
+    closeDatabase()
 })
 
 app.on("window-all-closed", () => {

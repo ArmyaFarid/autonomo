@@ -1,7 +1,7 @@
-import { ipcMain } from "electron"
-import { getDataRootPath, getDb, profile as profileTable } from "../../db/schema"
+import { ipcMain, BrowserWindow } from "electron"
+import { getDataRootPath, getDb, getRawDb, reinitDatabase, closeDatabase, profile as profileTable } from "../../db/schema"
 import { join } from "path"
-import { existsSync, mkdirSync, readdirSync, unlinkSync, statSync } from "fs"
+import { existsSync, mkdirSync, readdirSync, unlinkSync, statSync, rmSync } from "fs"
 import AdmZip from "adm-zip"
 import { createHash } from "crypto"
 import { readFileSync } from "fs"
@@ -23,11 +23,9 @@ function computeChecksum(filePath: string): string {
     return createHash("sha256").update(content).digest("hex")
 }
 
-function createBackupZip(backupsDir: string, retentionCount: number): string {
-    if (!existsSync(backupsDir)) mkdirSync(backupsDir, { recursive: true })
-
-    const date = new Date().toISOString().split("T")[0]
-    const zipPath = join(backupsDir, `armya-backup-${date}.zip`)
+function buildZip(destPath: string): void {
+    // Force WAL checkpoint so armya.db on disk has all committed data
+    try { getRawDb().pragma("wal_checkpoint(FULL)") } catch { /* no-op if not initialized */ }
 
     const zip = new AdmZip()
     const dbPath = getDbPath()
@@ -43,8 +41,16 @@ function createBackupZip(backupsDir: string, retentionCount: number): string {
         checksum: existsSync(dbPath) ? computeChecksum(dbPath) : "",
     }
     zip.addFile("manifest.json", Buffer.from(JSON.stringify(manifest, null, 2)))
-    zip.writeZip(zipPath)
+    zip.writeZip(destPath)
+}
 
+function createBackupZip(backupsDir: string, retentionCount: number): string {
+    if (!existsSync(backupsDir)) mkdirSync(backupsDir, { recursive: true })
+
+    const date = new Date().toISOString().split("T")[0]
+    const zipPath = join(backupsDir, `armya-backup-${date}.zip`)
+
+    buildZip(zipPath)
     pruneOldBackups(backupsDir, retentionCount)
     return zipPath
 }
@@ -125,12 +131,36 @@ export function registerBackupHandlers(): void {
             const manifest = JSON.parse(manifestEntry.getData().toString("utf-8"))
             if (!manifest.schemaVersion) return { success: false, error: "Invalid manifest format" }
 
+            closeDatabase()
+            // Remove WAL sidecar files so the restored armya.db is used as-is
+            const walPath = getDbPath() + "-wal"
+            const shmPath = getDbPath() + "-shm"
+            if (existsSync(walPath)) rmSync(walPath)
+            if (existsSync(shmPath)) rmSync(shmPath)
             zip.extractAllTo(getDataRootPath(), true)
+            reinitDatabase()
             return { success: true, data: manifest }
         } catch (error) {
             return { success: false, error: String(error) }
         }
     })
+
+    ipcMain.handle("backup:exportTo", (_event, destPath: string) => {
+        try {
+            buildZip(destPath)
+            return { success: true, data: destPath }
+        } catch (error) {
+            return { success: false, error: String(error) }
+        }
+    })
+
+    ipcMain.handle("app:reloadWindow", (event) => {
+        const win = BrowserWindow.fromWebContents(event.sender)
+        // setImmediate lets the IPC response reach the renderer before the window is reloaded
+        setImmediate(() => { if (win) win.reload() })
+        return { success: true }
+    })
+
 }
 
 export function pruneOldBackups(dir: string, keep: number): void {

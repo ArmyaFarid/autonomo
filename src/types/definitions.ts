@@ -8,6 +8,8 @@ export interface Profile {
     id: number
     name: string
     address: string
+    appPin: string | null
+    touchIdEnabled: number
     phone: string | null
     email: string | null
     gstNumber: string | null

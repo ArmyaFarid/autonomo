@@ -4,6 +4,12 @@ const api = {
     // Profile
     getProfile: () => ipcRenderer.invoke("profile:get"),
     saveProfile: (data: unknown) => ipcRenderer.invoke("profile:save", data),
+    setPin: (pin: string) => ipcRenderer.invoke("profile:setPin", pin),
+    removePin: () => ipcRenderer.invoke("profile:removePin"),
+    verifyPin: (pin: string) => ipcRenderer.invoke("profile:verifyPin", pin),
+    touchIdAvailable: () => ipcRenderer.invoke("auth:touchIdAvailable"),
+    promptTouchId: () => ipcRenderer.invoke("auth:promptTouchId"),
+    setTouchId: (enabled: boolean) => ipcRenderer.invoke("profile:setTouchId", enabled),
 
     // Clients
     getClients: () => ipcRenderer.invoke("clients:getAll"),
@@ -52,6 +58,7 @@ const api = {
     createBackup: () => ipcRenderer.invoke("backup:create"),
     checkAutoBackup: () => ipcRenderer.invoke("backup:checkAuto"),
     restoreBackup: (zipPath: string) => ipcRenderer.invoke("backup:restore", zipPath),
+    exportBackup: (destPath: string) => ipcRenderer.invoke("backup:exportTo", destPath),
     listBackups: () => ipcRenderer.invoke("backup:list"),
 
     // File dialogs & shell
@@ -62,6 +69,9 @@ const api = {
     // Config
     getConfig: () => ipcRenderer.invoke("config:get"),
     isFirstLaunch: () => ipcRenderer.invoke("config:isFirstLaunch"),
+
+    // App
+    reloadWindow: () => ipcRenderer.invoke("app:reloadWindow"),
 }
 
 contextBridge.exposeInMainWorld("api", api)
