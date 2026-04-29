@@ -18,7 +18,8 @@
       "Bash(node *)",
       "Bash(git checkout *)",
       "Bash(git merge refactor/computed-overdue --no-ff -m ' *)",
-      "Bash(git branch *)"
+      "Bash(git branch *)",
+      "Bash(git *)"
     ]
   }
 }
