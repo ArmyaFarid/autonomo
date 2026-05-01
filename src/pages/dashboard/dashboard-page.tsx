@@ -4,7 +4,8 @@ import { AlertTriangle, Clock, TrendingUp, Receipt } from "lucide-react"
 import { useAtomValue } from "jotai"
 import { profileAtom } from "../../store/profileAtom"
 import { formatDate, cn, isOverdue } from "../../lib/utils"
-import type { Invoice, Expense } from "../../types/definitions"
+import { computePaymentStatus } from "../../types/definitions"
+import type { Invoice, Expense, PaymentReport } from "../../types/definitions"
 
 export function DashboardPage(): JSX.Element {
     const { t } = useTranslation()
@@ -17,16 +18,19 @@ export function DashboardPage(): JSX.Element {
 
     const [invoices, setInvoices] = useState<Invoice[]>([])
     const [expenses, setExpenses] = useState<Expense[]>([])
+    const [yearPayments, setYearPayments] = useState<PaymentReport[]>([])
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
         async function load(): Promise<void> {
-            const [invRes, expRes] = await Promise.all([
+            const [invRes, expRes, payRes] = await Promise.all([
                 window.api.getInvoices({ year: currentYear }),
                 window.api.getExpenses({ year: currentYear }),
+                window.api.getPaymentsByYear(currentYear),
             ])
             if (invRes.success && invRes.data) setInvoices(invRes.data as Invoice[])
             if (expRes.success && expRes.data) setExpenses(expRes.data as Expense[])
+            if (payRes.success && payRes.data) setYearPayments(payRes.data as PaymentReport[])
             setLoading(false)
         }
         load()
@@ -35,24 +39,28 @@ export function DashboardPage(): JSX.Element {
     const fmt = (n: number): string =>
         locale.startsWith("en") ? `$${n.toFixed(2)}` : `${n.toFixed(2).replace(".", ",")} $`
 
-    // Month metrics
-    const monthPaid = invoices
-        .filter((inv) => inv.status === "paid" && getMonth(inv.issueDate) === currentMonth)
-        .reduce((sum, inv) => sum + inv.total, 0)
+    const ps = (inv: Invoice) => computePaymentStatus(inv, inv.totalPaid ?? 0, inv.totalCredit ?? 0)
+
+    // Cash-basis monthly revenue: sum of payments received this month
+    const monthPaid = yearPayments
+        .filter((p) => getMonth(p.paymentDate) === currentMonth)
+        .reduce((sum, p) => sum + p.amount, 0)
 
     const monthExpenses = expenses
         .filter((e) => getMonth(e.date) === currentMonth)
         .reduce((sum, e) => sum + e.amount, 0)
 
-    const pendingInvoices = invoices.filter((inv) => inv.status === "sent")
-    const pendingAmount = pendingInvoices.reduce((sum, inv) => sum + inv.total, 0)
+    const pendingInvoices = invoices.filter((inv) => ps(inv) === "unpaid" || ps(inv) === "partial")
+    const pendingAmount = pendingInvoices.reduce((sum, inv) => {
+        const paid = inv.totalPaid ?? 0
+        const credited = inv.totalCredit ?? 0
+        return sum + Math.max(0, inv.total - paid - credited)
+    }, 0)
 
     const overdueInvoices = invoices.filter((inv) => isOverdue(inv, profile?.lateInvoiceAlertDays ?? 30))
 
-    // Annual metrics
-    const ytdRevenue = invoices
-        .filter((inv) => inv.status === "paid")
-        .reduce((sum, inv) => sum + inv.total, 0)
+    // Cash-basis YTD revenue: sum of all payments received this year
+    const ytdRevenue = yearPayments.reduce((sum, p) => sum + p.amount, 0)
 
     const ytdTotalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0)
 

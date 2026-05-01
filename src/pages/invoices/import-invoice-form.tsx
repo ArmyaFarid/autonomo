@@ -1,13 +1,13 @@
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { ChevronLeft, Paperclip, Check, X } from "lucide-react"
+import { ChevronLeft, Paperclip, Check, X, Info, AlertTriangle } from "lucide-react"
 import { useAtomValue } from "jotai"
 import { clientsAtom } from "../../store/clientsAtom"
 import { profileAtom } from "../../store/profileAtom"
-import { toIsoDate } from "../../lib/utils"
+import { cn, toIsoDate } from "../../lib/utils"
 import type { Invoice } from "../../types/definitions"
 
 const GST_RATE = 0.05
@@ -25,8 +25,12 @@ const importSchema = z.object({
     enableGst: z.boolean(),
     enableQst: z.boolean(),
     description: z.string().optional(),
-    status: z.enum(["draft", "sent", "paid"]),
+    status: z.enum(["draft", "issued"]),
     notes: z.string().optional(),
+    alreadyPaid: z.boolean(),
+    paymentDate: z.string().optional(),
+    paymentAmount: z.coerce.number().optional(),
+    paymentMethod: z.enum(["wire", "cheque", "interac", "other"]).optional(),
 })
 
 type ImportFormValues = z.infer<typeof importSchema>
@@ -46,6 +50,9 @@ export function ImportInvoiceForm({ onSaved, onCancel }: ImportInvoiceFormProps)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState("")
     const [pdfSourcePath, setPdfSourcePath] = useState<string | null>(null)
+    const [paymentProofPath, setPaymentProofPath] = useState<string | null>(null)
+    const [numberExists, setNumberExists] = useState(false)
+    const numberCheckRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const form = useForm<ImportFormValues>({
         resolver: zodResolver(importSchema),
@@ -61,18 +68,51 @@ export function ImportInvoiceForm({ onSaved, onCancel }: ImportInvoiceFormProps)
             enableGst: false,
             enableQst: false,
             description: "",
-            status: "paid",
+            status: "issued",
             notes: "",
+            alreadyPaid: true,
+            paymentDate: toIsoDate(new Date()),
+            paymentAmount: undefined,
+            paymentMethod: "wire",
         },
     })
 
-    const { watch } = form
+    const { watch, setValue } = form
     const subtotal = parseFloat(String(watch("subtotal"))) || 0
     const enableGst = watch("enableGst")
     const enableQst = watch("enableQst")
+    const alreadyPaid = watch("alreadyPaid")
+    const numberValue = watch("number")
     const gstAmount = enableGst ? subtotal * GST_RATE : 0
     const qstAmount = enableQst ? subtotal * QST_RATE : 0
     const total = subtotal + gstAmount + qstAmount
+
+    useEffect(() => {
+        if (alreadyPaid) {
+            setValue("status", "issued")
+            if (!watch("paymentAmount")) {
+                setValue("paymentAmount", total || undefined)
+            }
+        }
+    }, [alreadyPaid])
+
+    useEffect(() => {
+        if (alreadyPaid && total > 0) {
+            setValue("paymentAmount", total)
+        }
+    }, [total, alreadyPaid])
+
+    useEffect(() => {
+        if (!numberValue.trim()) {
+            setNumberExists(false)
+            return
+        }
+        if (numberCheckRef.current) clearTimeout(numberCheckRef.current)
+        numberCheckRef.current = setTimeout(async () => {
+            const res = await window.api.checkInvoiceNumberExists(numberValue.trim())
+            setNumberExists(res.success && !!res.data)
+        }, 400)
+    }, [numberValue])
 
     const fmt = (n: number): string =>
         locale.startsWith("en") ? `$${n.toFixed(2)}` : `${n.toFixed(2).replace(".", ",")} $`
@@ -88,7 +128,21 @@ export function ImportInvoiceForm({ onSaved, onCancel }: ImportInvoiceFormProps)
         }
     }
 
+    async function pickPaymentProof(): Promise<void> {
+        const result = await window.api.openFileDialog({
+            title: t("invoices.legacyPaymentProof"),
+            properties: ["openFile"],
+            filters: [
+                { name: "Images / PDF", extensions: ["pdf", "png", "jpg", "jpeg"] },
+            ],
+        })
+        if (result.success && (result.data as string[])?.[0]) {
+            setPaymentProofPath((result.data as string[])[0])
+        }
+    }
+
     async function onSubmit(values: ImportFormValues): Promise<void> {
+        if (numberExists) return
         setError("")
         setLoading(true)
 
@@ -134,6 +188,24 @@ export function ImportInvoiceForm({ onSaved, onCancel }: ImportInvoiceFormProps)
             await window.api.attachImportedPdf({ invoiceId: saved.id, sourcePath: pdfSourcePath })
         }
 
+        if (values.alreadyPaid && values.paymentDate && values.paymentAmount && values.paymentMethod) {
+            const payRes = await window.api.createPayment({
+                invoiceId: saved.id,
+                paymentDate: values.paymentDate,
+                amount: values.paymentAmount,
+                paymentMethod: values.paymentMethod,
+                reference: null,
+                notes: null,
+            })
+            if (payRes.success && paymentProofPath && (payRes.data as { id: number })?.id) {
+                await window.api.addPaymentProof({
+                    paymentId: (payRes.data as { id: number }).id,
+                    invoiceId: saved.id,
+                    sourcePath: paymentProofPath,
+                })
+            }
+        }
+
         setLoading(false)
         onSaved()
     }
@@ -145,12 +217,24 @@ export function ImportInvoiceForm({ onSaved, onCancel }: ImportInvoiceFormProps)
                     <ChevronLeft className="h-5 w-5" />
                 </button>
                 <div>
-                    <h2 className="text-2xl font-semibold">{t("invoices.importTitle")}</h2>
-                    <p className="text-muted-foreground text-sm">{t("invoices.importSubtitle")}</p>
+                    <h2 className="text-2xl font-semibold">{t("invoices.legacyTitle")}</h2>
+                    <p className="text-muted-foreground text-sm">{t("invoices.legacySubtitle")}</p>
                 </div>
             </div>
 
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            {/* Educational tooltip */}
+            <div className="mb-6 flex gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3">
+                <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
+                <p className="text-sm text-amber-800">{t("invoices.legacyTooltip")}</p>
+            </div>
+
+            <form
+                onSubmit={form.handleSubmit(onSubmit)}
+                className={cn(
+                    "space-y-6 rounded-lg border p-6",
+                    "border-amber-200 bg-amber-50/30"
+                )}
+            >
 
                 <Section title={t("invoices.client")}>
                     <Field label={`${t("invoices.number")} *`} error={form.formState.errors.number?.message}>
@@ -158,9 +242,16 @@ export function ImportInvoiceForm({ onSaved, onCancel }: ImportInvoiceFormProps)
                             {...form.register("number")}
                             type="text"
                             placeholder="2024-001"
-                            className={inputCn}
+                            className={cn(inputCn, numberExists && "border-amber-400 focus-visible:ring-amber-400")}
                         />
-                        <p className="text-muted-foreground text-xs">{t("invoices.importNumberHint")}</p>
+                        {numberExists ? (
+                            <div className="flex items-center gap-1.5 text-amber-700">
+                                <AlertTriangle className="h-3.5 w-3.5" />
+                                <p className="text-xs">{t("invoices.numberExists")}</p>
+                            </div>
+                        ) : (
+                            <p className="text-muted-foreground text-xs">{t("invoices.importNumberHint")}</p>
+                        )}
                     </Field>
                     <Field label={`${t("invoices.client")} *`} error={form.formState.errors.clientId?.message}>
                         <select {...form.register("clientId")} className={selectCn}>
@@ -264,12 +355,77 @@ export function ImportInvoiceForm({ onSaved, onCancel }: ImportInvoiceFormProps)
 
                 <Section title={t("invoices.status")}>
                     <Field label={`${t("invoices.importStatus")} *`}>
-                        <select {...form.register("status")} className={selectCn}>
-                            <option value="paid">{t("invoices.statusPaid")}</option>
-                            <option value="sent">{t("invoices.statusSent")}</option>
+                        <select {...form.register("status")} className={selectCn} disabled={alreadyPaid}>
+                            <option value="issued">{t("invoices.statusIssued")}</option>
                             <option value="draft">{t("invoices.statusDraft")}</option>
                         </select>
                     </Field>
+                </Section>
+
+                {/* Already paid toggle */}
+                <Section title="">
+                    <label className="flex cursor-pointer items-start gap-3">
+                        <input
+                            {...form.register("alreadyPaid")}
+                            type="checkbox"
+                            className="accent-primary mt-0.5"
+                        />
+                        <div>
+                            <span className="text-sm font-medium">{t("invoices.alreadyPaid")}</span>
+                            <p className="text-muted-foreground text-xs">{t("invoices.importSubtitle")}</p>
+                        </div>
+                    </label>
+
+                    {alreadyPaid ? (
+                        <div className="mt-3 space-y-3 rounded-md border border-green-200 bg-green-50/40 p-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <Field label={`${t("invoices.legacyPaymentDate")} *`}>
+                                    <input {...form.register("paymentDate")} type="date" className={inputCn} />
+                                </Field>
+                                <Field label={`${t("invoices.legacyPaymentAmount")} *`}>
+                                    <input
+                                        {...form.register("paymentAmount")}
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        className={inputCn}
+                                    />
+                                </Field>
+                            </div>
+                            <Field label={t("invoices.legacyPaymentMethod")}>
+                                <select {...form.register("paymentMethod")} className={selectCn}>
+                                    <option value="wire">{t("payments.methodWire")}</option>
+                                    <option value="cheque">{t("payments.methodCheque")}</option>
+                                    <option value="interac">{t("payments.methodInterac")}</option>
+                                    <option value="other">{t("payments.methodOther")}</option>
+                                </select>
+                            </Field>
+                            <Field label={t("invoices.legacyPaymentProof")}>
+                                {paymentProofPath ? (
+                                    <div className="border-input flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-sm">
+                                        <Check className="h-4 w-4 flex-shrink-0 text-green-500" />
+                                        <span className="min-w-0 flex-1 truncate text-xs">{paymentProofPath.split("/").pop()}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setPaymentProofPath(null)}
+                                            className="text-muted-foreground hover:text-destructive flex h-7 w-7 flex-shrink-0 items-center justify-center rounded"
+                                        >
+                                            <X className="h-3.5 w-3.5" />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={pickPaymentProof}
+                                        className="border-input bg-white hover:bg-muted/50 inline-flex h-10 items-center gap-2 rounded-md border px-3 text-sm"
+                                    >
+                                        <Paperclip className="h-4 w-4" />
+                                        {t("invoices.legacyPaymentProof")}
+                                    </button>
+                                )}
+                            </Field>
+                        </div>
+                    ) : null}
                 </Section>
 
                 <Section title={t("invoices.importAttachPdf")}>
@@ -314,7 +470,7 @@ export function ImportInvoiceForm({ onSaved, onCancel }: ImportInvoiceFormProps)
                     </button>
                     <button
                         type="submit"
-                        disabled={loading}
+                        disabled={loading || numberExists}
                         className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-10 flex-1 items-center justify-center rounded-md px-4 text-sm font-medium disabled:opacity-50"
                     >
                         {loading ? t("common.loading") : t("invoices.importSave")}

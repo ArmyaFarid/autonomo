@@ -1,18 +1,22 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { X, FileDown, ExternalLink, CheckCircle, DollarSign, Paperclip, Pencil, RotateCcw, XCircle, Ban, Plus, Trash2 } from "lucide-react"
+import {
+    X, FileDown, ExternalLink, CheckCircle, DollarSign, Paperclip, Pencil,
+    Plus, Trash2, AlertTriangle, Info, Ban, Send,
+} from "lucide-react"
 import { useAtomValue } from "jotai"
 import { clientsAtom } from "../../store/clientsAtom"
 import { profileAtom } from "../../store/profileAtom"
 import { formatDate, formatCurrency, cn, isOverdue } from "../../lib/utils"
-import type { Invoice, InvoiceLine, Payment, InvoiceAttachment } from "../../types/definitions"
+import { computePaymentStatus } from "../../types/definitions"
+import type { Invoice, InvoiceLine, Payment, InvoiceAttachment, CreditNote } from "../../types/definitions"
 import { PaymentFormModal } from "./payment-form-modal"
 import { MarkPaidDialog } from "./mark-paid-dialog"
 
 const EDIT_WINDOW_MS = 5 * 60 * 1000
+const SUPPRESS_ISSUE_KEY = "suppress_issue_confirm"
+const SUPPRESS_VOID_KEY = "suppress_void_confirm"
 
-// Persists across modal close/reopen for the current app session.
-// Maps paymentId → timestamp when the edit window started (create or last edit).
 const editWindowStart = new Map<number, number>()
 
 interface InvoiceDetailModalProps {
@@ -23,13 +27,21 @@ interface InvoiceDetailModalProps {
     onEdit: (invoice: Invoice, lines: InvoiceLine[]) => void
 }
 
-const STATUS_COLORS: Record<string, string> = {
+// Phase 1 — document status badge colors
+const DOC_STATUS_COLORS: Record<string, string> = {
     draft: "bg-gray-100 text-gray-600",
-    sent: "bg-blue-100 text-blue-700",
+    issued: "bg-blue-100 text-blue-700",
+    voided: "bg-red-100 text-red-700",
+}
+
+// Phase 1 — computed payment status badge colors
+const PAY_STATUS_COLORS: Record<string, string> = {
+    unpaid: "bg-amber-100 text-amber-700",
+    partial: "bg-orange-100 text-orange-700",
     paid: "bg-green-100 text-green-700",
-    overdue: "bg-red-100 text-red-700",
-    refused: "bg-orange-100 text-orange-700",
-    cancelled: "bg-gray-200 text-gray-500",
+    credited: "bg-purple-100 text-purple-700",
+    voided: "bg-red-100 text-red-700",
+    draft: "bg-gray-100 text-gray-500",
 }
 
 export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit }: InvoiceDetailModalProps): JSX.Element {
@@ -38,30 +50,37 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
     const profile = useAtomValue(profileAtom)
     const locale = profile?.locale ?? "fr-CA"
 
-    // Local copies so status refreshes immediately after payment operations
-    // without waiting for the parent re-render cycle to propagate.
     const [localInvoice, setLocalInvoice] = useState<Invoice>(invoice)
     const [localLines, setLocalLines] = useState<InvoiceLine[]>(lines)
 
     const [pdfLoading, setPdfLoading] = useState(false)
     const [pdfMsg, setPdfMsg] = useState("")
-    const [statusLoading, setStatusLoading] = useState(false)
+    const [actionLoading, setActionLoading] = useState(false)
     const [error, setError] = useState("")
 
     const [attachments, setAttachments] = useState<InvoiceAttachment[]>([])
     const [paymentsData, setPaymentsData] = useState<Payment[]>([])
+    const [creditNotesData, setCreditNotesData] = useState<CreditNote[]>([])
     const [showPaymentForm, setShowPaymentForm] = useState(false)
     const [showMarkPaid, setShowMarkPaid] = useState(false)
     const [editingPayment, setEditingPayment] = useState<Payment | null>(null)
 
-    // Tick every second so countdown displays stay live
+    // Phase 1 — modal states
+    const [showIssueConfirm, setShowIssueConfirm] = useState(false)
+    const [showVoidConfirm, setShowVoidConfirm] = useState(false)
+    const [showCancelWizard, setShowCancelWizard] = useState(false)
+    const [cancelStep, setCancelStep] = useState<"choice" | "credit">("choice")
+    const [creditAmount, setCreditAmount] = useState("")
+    const [creditReason, setCreditReason] = useState("")
+    const [suppressIssue, setSuppressIssue] = useState(() => !!localStorage.getItem(SUPPRESS_ISSUE_KEY))
+    const [suppressVoid, setSuppressVoid] = useState(() => !!localStorage.getItem(SUPPRESS_VOID_KEY))
+
     const [, setTick] = useState(0)
     useEffect(() => {
         const interval = setInterval(() => setTick((n) => n + 1), 1000)
         return () => clearInterval(interval)
     }, [])
 
-    // Sync local state when parent passes updated invoice (e.g. after status change)
     useEffect(() => {
         setLocalInvoice(invoice)
         setLocalLines(lines)
@@ -70,6 +89,7 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
     useEffect(() => {
         loadAttachments()
         loadPayments()
+        loadCreditNotes()
     }, [invoice.id])
 
     async function loadAttachments(): Promise<void> {
@@ -82,8 +102,14 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
         if (res.success && res.data) setPaymentsData(res.data as Payment[])
     }
 
-    // Returns seconds remaining in the edit window for a given payment.
-    // Uses editWindowStart map (reset on each save/edit) with createdAt as fallback.
+    async function loadCreditNotes(): Promise<void> {
+        const res = await window.api.getInvoice(localInvoice.id)
+        if (res.success && res.data) {
+            const { creditNotes } = res.data as { creditNotes: CreditNote[] }
+            if (creditNotes) setCreditNotesData(creditNotes)
+        }
+    }
+
     function getSecondsLeft(p: Payment): number {
         const start = editWindowStart.get(p.id) ?? new Date(p.createdAt).getTime()
         return Math.max(0, Math.floor((start + EDIT_WINDOW_MS - Date.now()) / 1000))
@@ -95,31 +121,55 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
         return `${m}:${s}`
     }
 
+    async function refreshInvoice(): Promise<void> {
+        const res = await window.api.getInvoice(localInvoice.id)
+        if (res.success && res.data) {
+            const { invoice: updated, lines: updatedLines, creditNotes } = res.data as { invoice: Invoice; lines: InvoiceLine[]; creditNotes: CreditNote[] }
+            setLocalInvoice(updated)
+            setLocalLines(updatedLines)
+            if (creditNotes) setCreditNotesData(creditNotes as CreditNote[])
+            onUpdated(updated, updatedLines)
+        }
+    }
+
     const client = clients.find((c) => c.id === localInvoice.clientId)
     const isFreeform = localInvoice.invoiceType === "freeform"
     const isImported = localInvoice.invoiceType === "imported"
     const totalHours = localLines.reduce((sum, l) => sum + l.qty, 0)
     const totalPaid = paymentsData.reduce((sum, p) => sum + p.amount, 0)
-    const remaining = Math.max(0, localInvoice.total - totalPaid)
+    const totalCredit = creditNotesData.reduce((sum, cn) => sum + cn.amount, 0)
+    const balanceDue = Math.max(0, localInvoice.total - totalPaid - totalCredit)
 
-    const statusLabel = (s: string): string => ({
+    // Phase 1 — computed payment status
+    const payStatus = computePaymentStatus(localInvoice, totalPaid, totalCredit)
+    const docStatus = localInvoice.status
+    const overdue = isOverdue(localInvoice, profile?.lateInvoiceAlertDays ?? 30)
+    const pdfGenerated = !!localInvoice.pdfPath
+    const canEdit = docStatus === "draft" && !isImported
+    const canIssue = docStatus === "draft"
+    // Void only when no financial transaction has occurred yet
+    const canVoid = docStatus === "issued" && payStatus === "unpaid"
+    // Credit note when invoice is financially open (unpaid or partially paid)
+    const canCredit = docStatus === "issued" && (payStatus === "unpaid" || payStatus === "partial")
+    const canReopen = false
+    const canRecordPayment = docStatus === "issued" && payStatus !== "paid" && payStatus !== "credited"
+    const showPaymentsSection = docStatus === "issued" || payStatus === "paid" || payStatus === "credited"
+    const locked = docStatus === "voided" || payStatus === "paid" || payStatus === "credited"
+
+    const docStatusLabel = (s: string): string => ({
         draft: t("invoices.statusDraft"),
-        sent: t("invoices.statusSent"),
-        paid: t("invoices.statusPaid"),
-        overdue: t("invoices.statusOverdue"),
-        refused: t("invoices.statusRefused"),
-        cancelled: t("invoices.statusCancelled"),
+        issued: t("invoices.statusIssued"),
+        voided: t("invoices.statusVoided"),
     }[s] ?? s)
 
-    async function refreshInvoice(): Promise<void> {
-        const res = await window.api.getInvoice(localInvoice.id)
-        if (res.success && res.data) {
-            const { invoice: updated, lines: updatedLines } = res.data as { invoice: Invoice; lines: InvoiceLine[] }
-            setLocalInvoice(updated)
-            setLocalLines(updatedLines)
-            onUpdated(updated, updatedLines)
-        }
-    }
+    const payStatusLabel = (s: string): string => ({
+        unpaid: t("invoices.statusUnpaid"),
+        partial: t("invoices.statusPartial"),
+        paid: t("invoices.statusPaid"),
+        credited: t("invoices.statusCredited"),
+        voided: t("invoices.statusVoided"),
+        draft: t("invoices.statusDraft"),
+    }[s] ?? s)
 
     async function handleGeneratePdf(): Promise<void> {
         setPdfLoading(true)
@@ -130,7 +180,7 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
             setPdfMsg(t("invoices.pdfSuccess"))
             await refreshInvoice()
         } else {
-            setError(result.error === "paid" ? t("invoices.pdfPaidError") : (result.error ?? t("invoices.pdfError")))
+            setError(result.error === "voided" ? t("invoices.pdfVoidedError") : (result.error ?? t("invoices.pdfError")))
         }
         setPdfLoading(false)
     }
@@ -141,31 +191,73 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
         if (!result.success) setError(result.error ?? t("common.error"))
     }
 
-    async function handleStatusChange(newStatus: string, confirmKey: string): Promise<void> {
-        if (!confirm(t(confirmKey))) return
-        setStatusLoading(true)
+    // Phase 1 — Issue invoice
+    async function handleIssue(): Promise<void> {
+        setShowIssueConfirm(false)
+        setActionLoading(true)
         setError("")
-        const result = await window.api.updateInvoiceStatus(localInvoice.id, newStatus)
-        if (result.success) { await refreshInvoice() }
-        else setError(result.error ?? t("common.error"))
-        setStatusLoading(false)
-    }
-
-    async function handleReopen(): Promise<void> {
-        if (!confirm(t("invoices.confirmReopen"))) return
-        setStatusLoading(true)
-        setError("")
-        const result = await window.api.reopenInvoice(localInvoice.id)
+        const result = await window.api.issueInvoice(localInvoice.id)
         if (result.success && result.data) {
             const { invoice: updated, lines: updatedLines } = result.data as { invoice: Invoice; lines: InvoiceLine[] }
-            onEdit(updated, updatedLines)
+            setLocalInvoice(updated)
+            setLocalLines(updatedLines)
+            onUpdated(updated, updatedLines)
         } else {
             setError(result.error ?? t("common.error"))
-            setStatusLoading(false)
+        }
+        setActionLoading(false)
+    }
+
+    function handleClickIssue(): void {
+        if (suppressIssue) {
+            handleIssue()
+        } else {
+            setShowIssueConfirm(true)
         }
     }
 
-    async function handleAttachProof(): Promise<void> {
+    function handleVoidSelected(): void {
+        setShowCancelWizard(false)
+        if (suppressVoid) {
+            handleVoid()
+        } else {
+            setShowVoidConfirm(true)
+        }
+    }
+
+    // Phase 1 — Void invoice
+    async function handleVoid(): Promise<void> {
+        setShowCancelWizard(false)
+        setActionLoading(true)
+        setError("")
+        const result = await window.api.voidInvoice(localInvoice.id)
+        if (result.success) {
+            await refreshInvoice()
+        } else {
+            setError(result.error ?? t("common.error"))
+        }
+        setActionLoading(false)
+    }
+
+    // Phase 1 — Credit note
+    async function handleCreditNote(): Promise<void> {
+        const amount = parseFloat(creditAmount)
+        if (isNaN(amount) || amount <= 0) return
+        if (!creditReason.trim()) return
+        setShowCancelWizard(false)
+        setActionLoading(true)
+        setError("")
+        const result = await window.api.addCreditNote({ invoiceId: localInvoice.id, amount, reason: creditReason.trim() })
+        if (result.success) {
+            await refreshInvoice()
+            await loadPayments()
+        } else {
+            setError(result.error ?? t("common.error"))
+        }
+        setActionLoading(false)
+    }
+
+async function handleAttachProof(): Promise<void> {
         const result = await window.api.openFileDialog({
             filters: [{ name: "Documents", extensions: ["pdf", "png", "jpg", "jpeg", "xlsx", "xls"] }],
             properties: ["openFile"],
@@ -213,46 +305,36 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
         await refreshInvoice()
     }
 
-    function openEditPayment(p: Payment): void {
-        setEditingPayment(p)
-        setShowPaymentForm(true)
-    }
-
-    // Derive "paid" from payments rather than trusting only the DB label.
-    // If all payments cover the total, we treat the invoice as paid regardless of DB status.
-    const fullyPaid = paymentsData.length > 0 && remaining <= 0.01
-    const effectiveStatus = fullyPaid ? "paid" : localInvoice.status
-    const status = effectiveStatus
-
-    const overdue = isOverdue(localInvoice, profile?.lateInvoiceAlertDays ?? 30)
-    const locked = status === "paid" || status === "cancelled"
-    const canRecordPayment = status === "sent"
-    const showPaymentsSection = status === "sent" || status === "paid"
-    const pdfGenerated = !!localInvoice.pdfPath
-
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <div className="bg-background flex h-[90vh] w-full max-w-2xl flex-col rounded-lg shadow-lg">
 
                 {/* Header */}
                 <div className="flex items-center justify-between border-b px-6 py-4">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
                         <h3 className="font-mono text-lg font-semibold">{localInvoice.number}</h3>
-                        <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", STATUS_COLORS[status])}>
-                            {statusLabel(status)}
+                        {/* Phase 1 — document status badge */}
+                        <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", DOC_STATUS_COLORS[docStatus])}>
+                            {docStatusLabel(docStatus)}
                         </span>
-                        <span className={cn(
-                            "rounded border px-2 py-0.5 text-xs",
-                            isImported
-                                ? "border-amber-300 bg-amber-50 text-amber-700"
-                                : "text-muted-foreground"
-                        )}>
-                            {isImported
-                                ? t("invoices.typeImported")
-                                : isFreeform
-                                    ? t("invoices.typeFreeform")
-                                    : t("invoices.typeWeekly")}
-                        </span>
+                        {/* Phase 1 — computed payment status badge (only for issued) */}
+                        {docStatus === "issued" ? (
+                            <span className={cn("flex items-center gap-1 rounded border px-2 py-0.5 text-xs", PAY_STATUS_COLORS[payStatus])}>
+                                {payStatusLabel(payStatus)}
+                                <span title={t("invoices.computedStatusInfo")}>
+                                    <Info className="h-3 w-3 opacity-60" />
+                                </span>
+                            </span>
+                        ) : null}
+                        {isImported ? (
+                            <span className="rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                                {t("invoices.typeImported")}
+                            </span>
+                        ) : isFreeform ? (
+                            <span className="text-muted-foreground rounded border px-2 py-0.5 text-xs">
+                                {t("invoices.typeFreeform")}
+                            </span>
+                        ) : null}
                     </div>
                     <button onClick={onClose} className="text-muted-foreground hover:text-foreground rounded p-1">
                         <X className="h-5 w-5" />
@@ -267,8 +349,9 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
                         <Row label={t("invoices.dueDate")}>{formatDate(localInvoice.dueDate, locale)}</Row>
                     ) : null}
 
-                    {overdue ? (
+                    {overdue && docStatus === "issued" && payStatus !== "paid" ? (
                         <div className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
                             <span className="font-medium">{t("invoices.overdueWarning")}</span>
                         </div>
                     ) : null}
@@ -317,7 +400,6 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
                         </Row>
                     </div>
 
-                    {/* Description */}
                     {localInvoice.description ? (
                         <div className="space-y-1 text-sm">
                             <p className="text-muted-foreground text-xs font-semibold uppercase tracking-wide">
@@ -347,18 +429,13 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
                                 {canRecordPayment ? (
                                     <button
                                         onClick={() => { setEditingPayment(null); setShowPaymentForm(true) }}
-                                        disabled={!pdfGenerated}
-                                        className="border-input bg-background hover:bg-accent inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                                        title={!pdfGenerated ? t("invoices.noPdfForPayment") : undefined}
+                                        className="border-input bg-background hover:bg-accent inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-xs font-medium"
                                     >
                                         <Plus className="h-3.5 w-3.5" />
                                         {t("payments.add")}
                                     </button>
                                 ) : null}
                             </div>
-                            {canRecordPayment && !pdfGenerated ? (
-                                <p className="text-xs text-amber-600">{t("invoices.noPdfForPayment")}</p>
-                            ) : null}
 
                             {paymentsData.length === 0 ? (
                                 <p className="text-muted-foreground text-sm">{t("payments.noPayments")}</p>
@@ -381,10 +458,19 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <span className="font-semibold text-green-700">{formatCurrency(p.amount, locale)}</span>
+                                                    {p.receiptPath ? (
+                                                        <button
+                                                            onClick={() => window.api.openPath(p.receiptPath!)}
+                                                            className="text-green-700 hover:text-green-900 flex h-7 w-7 items-center justify-center rounded"
+                                                            title={t("payments.openReceipt")}
+                                                        >
+                                                            <ExternalLink className="h-3.5 w-3.5" />
+                                                        </button>
+                                                    ) : null}
                                                     {isEditable ? (
                                                         <>
                                                             <button
-                                                                onClick={() => openEditPayment(p)}
+                                                                onClick={() => { setEditingPayment(p); setShowPaymentForm(true) }}
                                                                 className="border-primary/50 text-primary hover:bg-primary/10 inline-flex h-7 items-center gap-1 rounded border px-2 text-xs font-medium"
                                                             >
                                                                 <Pencil className="h-3 w-3" />
@@ -393,7 +479,6 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
                                                             <button
                                                                 onClick={() => handleDeletePayment(p)}
                                                                 className="text-muted-foreground hover:text-destructive flex h-7 w-7 items-center justify-center rounded"
-                                                                title={t("payments.confirmDelete")}
                                                             >
                                                                 <Trash2 className="h-3.5 w-3.5" />
                                                             </button>
@@ -409,14 +494,47 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
                                         <span className="font-medium">{formatCurrency(totalPaid, locale)}</span>
                                     </div>
 
-                                    {status !== "paid" ? (
+                                    {payStatus !== "paid" && payStatus !== "credited" ? (
                                         <div className="flex justify-between text-sm font-semibold">
                                             <span>{t("payments.remainingBalance")}</span>
-                                            <span className="text-amber-700">{formatCurrency(remaining, locale)}</span>
+                                            <span className="text-amber-700">{formatCurrency(balanceDue, locale)}</span>
                                         </div>
                                     ) : null}
                                 </div>
                             )}
+
+                            {/* Phase 1 — credit notes list */}
+                            {creditNotesData.length > 0 ? (
+                                <div className="space-y-1 border-t pt-3">
+                                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{t("invoices.creditNotes")}</p>
+                                    {creditNotesData.map((cn) => (
+                                        <div key={cn.id} className="flex items-center justify-between rounded-md border border-purple-200 bg-purple-50 px-3 py-2 text-sm">
+                                            <div className="flex flex-col gap-0.5">
+                                                {cn.number ? (
+                                                    <span className="font-mono text-xs font-semibold text-purple-900">{cn.number}</span>
+                                                ) : null}
+                                                <span className="text-purple-800 text-xs">{cn.reason}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-purple-700 font-semibold tabular-nums">− {formatCurrency(cn.amount, locale)}</span>
+                                                {cn.pdfPath ? (
+                                                    <button
+                                                        onClick={() => window.api.openPath(cn.pdfPath!)}
+                                                        className="text-purple-600 hover:text-purple-800 flex h-6 w-6 items-center justify-center rounded"
+                                                        title={t("invoices.openCreditNotePdf")}
+                                                    >
+                                                        <ExternalLink className="h-3.5 w-3.5" />
+                                                    </button>
+                                                ) : null}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    <div className="flex justify-between pt-1 text-sm">
+                                        <span className="text-muted-foreground">{t("invoices.totalCredit")}</span>
+                                        <span className="font-medium text-purple-700">− {formatCurrency(totalCredit, locale)}</span>
+                                    </div>
+                                </div>
+                            ) : null}
                         </div>
                     ) : null}
 
@@ -452,19 +570,11 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
                                             <span className="truncate text-xs">{a.name}</span>
                                         </div>
                                         <div className="flex items-center gap-1 flex-shrink-0 ml-2">
-                                            <button
-                                                onClick={() => window.api.openPath(a.path)}
-                                                className="text-muted-foreground hover:text-foreground flex h-7 w-7 items-center justify-center rounded"
-                                                title={t("invoices.openPdf")}
-                                            >
+                                            <button onClick={() => window.api.openPath(a.path)} className="text-muted-foreground hover:text-foreground flex h-7 w-7 items-center justify-center rounded">
                                                 <ExternalLink className="h-3.5 w-3.5" />
                                             </button>
                                             {!locked ? (
-                                                <button
-                                                    onClick={() => handleDeleteAttachment(a.id)}
-                                                    className="text-muted-foreground hover:text-destructive flex h-7 w-7 items-center justify-center rounded"
-                                                    title={t("invoices.deleteAttachment")}
-                                                >
+                                                <button onClick={() => handleDeleteAttachment(a.id)} className="text-muted-foreground hover:text-destructive flex h-7 w-7 items-center justify-center rounded">
                                                     <Trash2 className="h-3.5 w-3.5" />
                                                 </button>
                                             ) : null}
@@ -475,15 +585,21 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
                         )}
                     </div>
 
+                    {/* Phase 2 — PDF auto-info tooltip */}
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Info className="h-3 w-3 flex-shrink-0" />
+                        <span>{t("invoices.pdfAutoInfo")}</span>
+                    </div>
+
                     {error ? <p className="text-destructive text-sm">{error}</p> : null}
                     {pdfMsg ? <p className="text-sm text-green-600">{pdfMsg}</p> : null}
                 </div>
 
-                {/* Actions */}
+                {/* Action bar */}
                 <div className="border-t px-6 py-4">
                     <div className="flex flex-wrap gap-2">
 
-                        {status === "draft" && !isImported ? (
+                        {canEdit ? (
                             <button
                                 onClick={() => onEdit(localInvoice, localLines)}
                                 className="border-input bg-background hover:bg-accent inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium"
@@ -493,7 +609,8 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
                             </button>
                         ) : null}
 
-                        {status !== "paid" && !locked && !isImported ? (
+                        {/* PDF generate/regenerate — always available for non-imported invoices when PDF is missing */}
+                        {!isImported && docStatus !== "voided" && !pdfGenerated ? (
                             <button
                                 onClick={handleGeneratePdf}
                                 disabled={pdfLoading}
@@ -514,70 +631,125 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
                             </button>
                         ) : null}
 
-                        {status === "draft" ? (
+                        {localInvoice.creditedPdfPath ? (
                             <button
-                                onClick={() => handleStatusChange("sent", "invoices.confirmSent")}
-                                disabled={statusLoading || !pdfGenerated}
-                                title={!pdfGenerated ? t("invoices.noPdfToEmit") : undefined}
-                                className="border-input bg-background hover:bg-accent inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={() => window.api.openPath(localInvoice.creditedPdfPath!)}
+                                className="border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-800 inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium"
                             >
-                                <CheckCircle className="h-4 w-4" />
-                                {t("invoices.markSent")}
+                                <ExternalLink className="h-4 w-4" />
+                                {t("invoices.openCreditedPdf")}
                             </button>
                         ) : null}
 
-                        {status === "sent" ? (
+                        {/* Phase 1 — Issue button replaces old "Mark Sent" */}
+                        {canIssue ? (
+                            <button
+                                onClick={handleClickIssue}
+                                disabled={actionLoading}
+                                className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium disabled:opacity-50"
+                            >
+                                <Send className="h-4 w-4" />
+                                {actionLoading ? t("common.loading") : t("invoices.issue")}
+                            </button>
+                        ) : null}
+
+                        {/* Phase 1 — Mark Paid (opens existing MarkPaidDialog) */}
+                        {canRecordPayment ? (
                             <button
                                 onClick={() => setShowMarkPaid(true)}
-                                disabled={statusLoading || !pdfGenerated}
-                                title={!pdfGenerated ? t("invoices.noPdfForPayment") : undefined}
-                                className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                disabled={actionLoading}
+                                className="border-input bg-background hover:bg-accent inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium disabled:opacity-50"
                             >
                                 <DollarSign className="h-4 w-4" />
                                 {t("invoices.markPaid")}
                             </button>
                         ) : null}
 
-                        {status === "sent" ? (
+                        {/* Phase 1 — Cancel: void (no payments) or credit note (any open balance) */}
+                        {(canVoid || canCredit) ? (
                             <button
-                                onClick={() => handleStatusChange("refused", "invoices.confirmRefused")}
-                                disabled={statusLoading}
-                                className="border-input bg-background hover:bg-accent inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium disabled:opacity-50"
-                            >
-                                <XCircle className="h-4 w-4" />
-                                {t("invoices.markRefused")}
-                            </button>
-                        ) : null}
-
-                        {status === "refused" ? (
-                            <button
-                                onClick={handleReopen}
-                                disabled={statusLoading}
-                                className="border-input bg-background hover:bg-accent inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium disabled:opacity-50"
-                            >
-                                <RotateCcw className="h-4 w-4" />
-                                {t("invoices.reopen")}
-                            </button>
-                        ) : null}
-
-                        {!locked ? (
-                            <button
-                                onClick={() => handleStatusChange("cancelled", "invoices.confirmCancelled")}
-                                disabled={statusLoading}
+                                onClick={() => {
+                                    setCreditAmount(balanceDue.toFixed(2))
+                                    setCancelStep(canVoid ? "choice" : "credit")
+                                    setShowCancelWizard(true)
+                                }}
+                                disabled={actionLoading}
                                 className="border-input hover:bg-destructive/10 hover:text-destructive hover:border-destructive inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium text-muted-foreground disabled:opacity-50"
                             >
                                 <Ban className="h-4 w-4" />
                                 {t("invoices.markCancelled")}
                             </button>
                         ) : null}
+
+                        {canReopen ? (
+                            <button
+                                onClick={handleReopen}
+                                disabled={actionLoading}
+                                className="border-input bg-background hover:bg-accent inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium disabled:opacity-50"
+                            >
+                                <RotateCcw className="h-4 w-4" />
+                                {t("invoices.reopen")}
+                            </button>
+                        ) : null}
                     </div>
                 </div>
             </div>
+
+            {/* Phase 1 — Issue confirmation modal */}
+            {showIssueConfirm ? (
+                <ConfirmModal
+                    title={t("invoices.issueConfirmTitle")}
+                    body={t("invoices.issueEffect")}
+                    suppressKey={SUPPRESS_ISSUE_KEY}
+                    suppressLabel={t("invoices.dontShowAgain")}
+                    onSuppressChange={(v) => setSuppressIssue(v)}
+                    onConfirm={handleIssue}
+                    onCancel={() => setShowIssueConfirm(false)}
+                    confirmLabel={t("invoices.issue")}
+                    confirmClassName="bg-primary text-primary-foreground hover:bg-primary/90"
+                    icon={<CheckCircle className="h-5 w-5 text-primary" />}
+                />
+            ) : null}
+
+            {/* Phase 1 — Void confirmation modal */}
+            {showVoidConfirm ? (
+                <ConfirmModal
+                    title={t("invoices.cancelOptionVoidTitle")}
+                    body={t("invoices.cancelOptionVoidDesc")}
+                    suppressKey={SUPPRESS_VOID_KEY}
+                    suppressLabel={t("invoices.dontShowAgain")}
+                    onSuppressChange={(v) => setSuppressVoid(v)}
+                    onConfirm={handleVoid}
+                    onCancel={() => setShowVoidConfirm(false)}
+                    confirmLabel={t("invoices.cancelConfirmVoid")}
+                    confirmClassName="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    icon={<AlertTriangle className="h-5 w-5 text-destructive" />}
+                />
+            ) : null}
+
+            {/* Phase 1 — Cancellation wizard */}
+            {showCancelWizard ? (
+                <CancelWizard
+                    balanceDue={balanceDue}
+                    canVoid={canVoid}
+                    step={cancelStep}
+                    onStepChange={setCancelStep}
+                    creditAmount={creditAmount}
+                    creditReason={creditReason}
+                    onCreditAmountChange={setCreditAmount}
+                    onCreditReasonChange={setCreditReason}
+                    onVoidSelected={handleVoidSelected}
+                    onCredit={handleCreditNote}
+                    onClose={() => setShowCancelWizard(false)}
+                    locale={locale}
+                />
+            ) : null}
 
             {showPaymentForm ? (
                 <PaymentFormModal
                     invoice={localInvoice}
                     existingPayments={paymentsData}
+                    totalCredit={totalCredit}
                     editPayment={editingPayment ?? undefined}
                     onClose={() => { setShowPaymentForm(false); setEditingPayment(null) }}
                     onSaved={handlePaymentSaved}
@@ -587,11 +759,191 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
             {showMarkPaid ? (
                 <MarkPaidDialog
                     invoice={localInvoice}
-                    remaining={remaining}
+                    remaining={balanceDue}
                     onClose={() => setShowMarkPaid(false)}
                     onSaved={handlePaymentSaved}
                 />
             ) : null}
+        </div>
+    )
+}
+
+// Phase 1 — generic confirmation modal with "don't show again" checkbox
+interface ConfirmModalProps {
+    title: string
+    body: string
+    suppressKey: string
+    suppressLabel: string
+    onSuppressChange: (v: boolean) => void
+    onConfirm: () => void
+    onCancel: () => void
+    confirmLabel: string
+    confirmClassName: string
+    icon?: React.ReactNode
+}
+
+const ConfirmModal: React.FC<ConfirmModalProps> = ({
+    title, body, suppressKey, suppressLabel, onSuppressChange, onConfirm, onCancel, confirmLabel, confirmClassName, icon,
+}) => {
+    const { t } = useTranslation()
+    const [suppress, setSuppress] = useState(false)
+
+    function handleConfirm(): void {
+        if (suppress) {
+            localStorage.setItem(suppressKey, "1")
+            onSuppressChange(true)
+        }
+        onConfirm()
+    }
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-background w-full max-w-sm rounded-lg shadow-lg">
+                <div className="px-5 py-5 space-y-4">
+                    <div className="flex items-start gap-3">
+                        {icon ? <div className="flex-shrink-0 mt-0.5">{icon}</div> : null}
+                        <div>
+                            <p className="font-semibold">{title}</p>
+                            <p className="text-muted-foreground mt-1 text-sm">{body}</p>
+                        </div>
+                    </div>
+                    <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+                        <input
+                            type="checkbox"
+                            checked={suppress}
+                            onChange={(e) => setSuppress(e.target.checked)}
+                            className="accent-primary"
+                        />
+                        {suppressLabel}
+                    </label>
+                    <div className="flex gap-3 pt-1">
+                        <button
+                            type="button"
+                            onClick={onCancel}
+                            className="border-input bg-background hover:bg-accent inline-flex h-10 flex-1 items-center justify-center rounded-md border px-4 text-sm font-medium"
+                        >
+                            {t("common.cancel")}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleConfirm}
+                            className={cn("inline-flex h-10 flex-1 items-center justify-center rounded-md px-4 text-sm font-medium", confirmClassName)}
+                        >
+                            {confirmLabel}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// Phase 1 — unified cancellation wizard (VOID vs CREDIT NOTE)
+interface CancelWizardProps {
+    balanceDue: number
+    canVoid: boolean
+    step: "choice" | "credit"
+    onStepChange: (s: "choice" | "credit") => void
+    creditAmount: string
+    creditReason: string
+    onCreditAmountChange: (v: string) => void
+    onCreditReasonChange: (v: string) => void
+    onVoidSelected: () => void
+    onCredit: () => void
+    onClose: () => void
+    locale: string
+}
+
+const CancelWizard: React.FC<CancelWizardProps> = ({
+    balanceDue, canVoid, step, onStepChange, creditAmount, creditReason,
+    onCreditAmountChange, onCreditReasonChange, onVoidSelected, onCredit, onClose, locale,
+}) => {
+    const { t } = useTranslation()
+    const fmt = (n: number): string => locale.startsWith("en") ? `$${n.toFixed(2)}` : `${n.toFixed(2).replace(".", ",")} $`
+    const textareaCn = "border-input bg-background ring-offset-background focus-visible:ring-ring flex w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-background w-full max-w-md rounded-lg shadow-lg">
+                <div className="flex items-center justify-between border-b px-5 py-4">
+                    <h3 className="font-semibold">{t("invoices.cancelWizardTitle")}</h3>
+                    <button onClick={onClose} className="text-muted-foreground hover:text-foreground rounded p-1">
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
+
+                {step === "choice" ? (
+                    <div className="px-5 py-5 space-y-3">
+                        <p className="text-sm text-muted-foreground">{t("invoices.cancelWizardSubtitle")}</p>
+
+                        <button
+                            type="button"
+                            onClick={onVoidSelected}
+                            className="w-full rounded-md border-2 border-destructive/40 bg-red-50 p-4 text-left hover:bg-red-100 transition-colors"
+                        >
+                            <p className="font-semibold text-red-800">{t("invoices.cancelOptionVoidTitle")}</p>
+                            <p className="text-red-700 text-xs mt-1">{t("invoices.cancelOptionVoidDesc")}</p>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => onStepChange("credit")}
+                            className="w-full rounded-md border-2 border-purple-200 bg-purple-50 p-4 text-left hover:bg-purple-100 transition-colors"
+                        >
+                            <p className="font-semibold text-purple-900">{t("invoices.cancelOptionCreditTitle")}</p>
+                            <p className="text-purple-700 text-xs mt-1">{t("invoices.cancelOptionCreditDesc")}</p>
+                        </button>
+                    </div>
+                ) : (
+                    <div className="px-5 py-5 space-y-4">
+                        <p className="text-sm text-muted-foreground">{t("invoices.cancelOptionCreditDesc")}</p>
+                        <div className="space-y-1">
+                            <label className="text-sm font-medium">{t("invoices.creditNoteAmount")}</label>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="number"
+                                    min="0.01"
+                                    max={balanceDue}
+                                    step="0.01"
+                                    value={creditAmount}
+                                    onChange={(e) => onCreditAmountChange(e.target.value)}
+                                    className="border-input bg-background focus-visible:ring-ring flex h-10 w-40 rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                                />
+                                <span className="text-muted-foreground text-sm">{t("payments.remainingBalance")}: {fmt(balanceDue)}</span>
+                            </div>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-sm font-medium">{t("invoices.creditNoteReason")} *</label>
+                            <textarea
+                                rows={2}
+                                value={creditReason}
+                                onChange={(e) => onCreditReasonChange(e.target.value)}
+                                placeholder={t("invoices.creditNoteReasonPlaceholder")}
+                                className={textareaCn}
+                            />
+                        </div>
+                        <div className="flex gap-2 pt-1">
+                            {canVoid ? (
+                                <button type="button" onClick={() => onStepChange("choice")} className="border-input bg-background hover:bg-accent inline-flex h-9 flex-1 items-center justify-center rounded-md border text-sm font-medium">
+                                    {t("common.back")}
+                                </button>
+                            ) : (
+                                <button type="button" onClick={onClose} className="border-input bg-background hover:bg-accent inline-flex h-9 flex-1 items-center justify-center rounded-md border text-sm font-medium">
+                                    {t("common.cancel")}
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={onCredit}
+                                disabled={!creditReason.trim() || parseFloat(creditAmount) <= 0}
+                                className="bg-purple-600 text-white hover:bg-purple-700 inline-flex h-9 flex-1 items-center justify-center rounded-md text-sm font-medium disabled:opacity-50"
+                            >
+                                {t("invoices.cancelConfirmCredit")}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
         </div>
     )
 }

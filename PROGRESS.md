@@ -4,10 +4,10 @@
 
 ---
 
-## Overall Status: 🟡 File naming + attachments + import done — Bug fixes next
+## Overall Status: 🟡 Invoice lifecycle + cash-basis revenue done — testing next
 
-**Last updated:** 2026-04-25
-**Last session summary:** New human-readable file naming scheme (flat per-year folders, slugified names). Attachment management UI in invoice detail modal (list/open/delete). Expense receipt open+delete. New "Import invoice" form for historical invoices (manual number, direct total, single hours field, optional PDF attach, initial status picker). Amber "Importée" badge in list and detail. Fixed subtotal watch crash in import form.
+**Last updated:** 2026-04-30
+**Last session summary:** Complete invoice lifecycle refactor (Phase 1 status system). ComputedPaymentStatus (draft/unpaid/partial/paid/credited/voided) computed from totalPaid+totalCredit, never stored. Document status (draft/issued/voided) = legal lifecycle. Fixed CancelWizard UX (each option does one thing on click, void goes straight to ConfirmModal). Rewrote revenue calculation across dashboard + reports to cash-basis (actual payments received, not invoice face value). New payments:getByYear IPC with JOIN. PaymentReport type added. TypeScript clean.
 
 ---
 
@@ -79,13 +79,38 @@
 - [ ] Restore from zip (Settings → validate manifest → migrate if needed)
 - [ ] Auto-backup on launch ← DERNIÈRE PRIORITÉ
 
-## Phase 5.5 — Bug fixes ⬜  ← NEXT
+## Phase 5.5 — Invoice lifecycle refactor ✅ (done 2026-04-30)
 
-- [ ] Test and fix all known issues across the app
-- [ ] Old invoices/expenses: pdfPath/receiptPath point to old folder structure — opening those files will fail (paths changed this session)
-- [ ] Smoke test import invoice end-to-end (create → attach PDF → open from detail modal)
-- [ ] Test attachment delete (proof file gone from disk + list)
-- [ ] Test expense receipt replace (old file deleted, new one stored)
+**Status system:**
+- `ComputedPaymentStatus`: `draft | unpaid | partial | paid | credited | voided` — computed from `totalPaid + totalCredit`, never stored in DB
+- Document status (DB): `draft | issued | voided` — legal lifecycle only
+- `computePaymentStatus()` lives in `src/types/definitions.ts`, used everywhere
+
+**Business rules enforced:**
+- `canVoid = docStatus === "issued" && payStatus === "unpaid"` (no cash moved at all)
+- `canCredit = docStatus === "issued" && (payStatus === "unpaid" || payStatus === "partial")`
+- `canRecordPayment = docStatus === "issued" && payStatus !== "paid" && payStatus !== "credited"`
+- Voided is terminal — no reopen
+- Credit note pre-fills with `balanceDue` (not invoice total)
+
+**CancelWizard UX:**
+- VOID card: single click → closes wizard → opens ConfirmModal (same pattern as Issue)
+- CREDIT card: single click → navigates to credit form
+- Back button shows "Back" only if canVoid (otherwise "Cancel")
+
+**Cash-basis revenue:**
+- New `payments:getByYear` IPC — raw SQL JOIN of payments + invoices, filters voided invoices
+- New `PaymentReport` type: payment row joined with invoice context
+- Dashboard + reports both use actual cash received (not invoice face value)
+- Revenue grouped by invoice in reports: `byInvoice` Map with `received` field
+- Monthly revenue filtered by `paymentDate` month (not issue date)
+
+**Files changed:** invoice-detail-modal.tsx, payment-form-modal.tsx, create-invoice-form.tsx, import-invoice-form.tsx, invoices-list.tsx, dashboard-page.tsx, reports-page.tsx, definitions.ts, payments.ts (ipc), invoices.ts (ipc), reports.ts (ipc), preload.ts, translation.json (fr+en)
+
+## Phase 5.6 — Bug fixes ⬜  ← NEXT
+
+- [ ] Full end-to-end smoke test after lifecycle refactor
+- [ ] Old invoices/expenses: pdfPath/receiptPath point to old folder structure — opening those files will fail (paths changed in a prior session)
 
 ## Phase 6 — Payments ✅
 
@@ -122,6 +147,33 @@
 
 - [ ] Auto-backup on launch (check interval, create zip silently)
 - [ ] Restore from zip (Settings → validate manifest → migrate)
+
+---
+
+## Feature Backlog — Pro Polish (identified 2026-04-30)
+
+Grouped by priority. Pick up from here next session.
+
+### 🔴 Priority 1 — Quebec compliance
+
+- [ ] **$30,000 GST/QST threshold alert** — when YTD revenue approaches $30K, show a persistent warning banner in the dashboard telling the user to register for GST/QST. Missing this is a real compliance risk.
+- [ ] **Acomptes provisionnels estimate** — Quebec requires quarterly tax installments once owed taxes exceed ~$1,800/year. Dashboard section showing estimated Q1/Q2/Q3/Q4 amounts based on current YTD income and tax reserve rate.
+
+### 🟠 Priority 2 — High-value professional documents
+
+- [ ] **Invoice duplication** — "Dupliquer" button on any invoice that pre-fills a new invoice form with same client, rate, hours, description. Armya bills biweekly — this would be used every two weeks.
+- [ ] **Client statement PDF** — one document per client showing all invoices, payments, credits and current balance. Useful when a client disputes their account. New IPC `clients:generateStatement`, new PDF template.
+
+### 🟡 Priority 3 — Visibility and reporting
+
+- [ ] **Aging report** — invoices grouped by 0–30, 31–60, 61–90, 90+ days outstanding. A table in the Reports page, exportable. More useful than the current simple overdue flag.
+- [ ] **Revenue by client** — breakdown in the annual report and dashboard showing which client generated how much revenue this year.
+- [ ] **Global search** — search across invoices (number, client, description), expenses (description, category), clients (name, company). A search bar in the sidebar or top bar.
+
+### 🟢 Priority 4 — Convenience
+
+- [ ] **Recurring expenses** — mark an expense as recurring (monthly/annual) so it auto-creates next occurrence. Useful for hosting, domains, SaaS subscriptions.
+- [ ] **Overpayment detection** — if a payment would cause totalPaid > total, warn the user and show the overpaid amount clearly in the balance summary.
 
 ---
 

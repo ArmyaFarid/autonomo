@@ -62,6 +62,18 @@ Each entry follows this structure:
 **Fix:** Changed path to `join(__dirname, "../preload/index.js")`. Also added `.catch()` on the `init()` call in `app.tsx` so any future error still unblocks the loading screen.
 **Rule:** electron-vite always outputs preload as `index.js` (matching the rollupOptions input key). Always use `../preload/index.js` as the preload path in main.ts.
 
+### [04/2026] — Using invoice totals instead of actual payments for cash-basis revenue
+**Context:** Dashboard + Reports pages calculating revenue figures
+**Mistake:** Both pages loaded `invoices` filtered by status="paid" and summed `inv.total` (face value). This gave wrong numbers: (1) credited invoices were included in the "paid" filter, (2) partial payments showed full invoice total instead of amount received, (3) monthly revenue used `issueDate` instead of `paymentDate`
+**Fix:** Added `payments:getByYear` IPC (raw SQL JOIN of payments + invoices, excludes voided). New `PaymentReport` type. Both pages now sum `p.amount` from the payments table directly. Revenue grouped by invoice using a `byInvoice` Map with `received` field for the table display.
+**Rule:** Revenue = cash actually received (payments table). Never use invoice totals or invoice status to calculate revenue. Always use `paymentDate` for monthly filtering, not `issueDate`.
+
+### [04/2026] — Duplicate IPC handler registration crashes the app
+**Context:** profile.ts was registering `app:reloadWindow` but backup.ts already registered it
+**Mistake:** Two `ipcMain.handle()` calls for the same channel throw at runtime
+**Fix:** Removed duplicate from profile.ts, kept only in backup.ts
+**Rule:** Before registering any IPC channel, grep for the channel name across all `electron/ipc/` files to ensure it's not already registered elsewhere.
+
 ### [04/2026] — puppeteer 22.x is deprecated — use 24.x
 **Context:** Phase 1 — npm install
 **Mistake:** package.json specified puppeteer@22.8.2 which npm flagged as deprecated (< 24.15.0 no longer supported)

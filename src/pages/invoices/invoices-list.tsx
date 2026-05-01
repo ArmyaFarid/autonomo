@@ -7,7 +7,8 @@ import { clientsAtom } from "../../store/clientsAtom"
 import { cn, formatDate, formatCurrency, isOverdue } from "../../lib/utils"
 import { useAtomValue } from "jotai"
 import { profileAtom } from "../../store/profileAtom"
-import type { Invoice, Client } from "../../types/definitions"
+import { computePaymentStatus } from "../../types/definitions"
+import type { Invoice, Client, ComputedPaymentStatus } from "../../types/definitions"
 
 interface InvoicesListProps {
     refreshKey: number
@@ -16,13 +17,13 @@ interface InvoicesListProps {
     onSelect: (invoice: Invoice) => void
 }
 
-const STATUS_COLORS: Record<string, string> = {
+const STATUS_COLORS: Record<ComputedPaymentStatus, string> = {
     draft: "bg-gray-100 text-gray-600",
-    sent: "bg-blue-100 text-blue-700",
+    unpaid: "bg-blue-100 text-blue-700",
+    partial: "bg-amber-100 text-amber-700",
     paid: "bg-green-100 text-green-700",
-    overdue: "bg-red-100 text-red-700",
-    refused: "bg-orange-100 text-orange-700",
-    cancelled: "bg-gray-200 text-gray-500",
+    credited: "bg-violet-100 text-violet-700",
+    voided: "bg-gray-200 text-gray-500",
 }
 
 export function InvoicesList({ refreshKey, onNew, onImport, onSelect }: InvoicesListProps): JSX.Element {
@@ -54,24 +55,28 @@ export function InvoicesList({ refreshKey, onNew, onImport, onSelect }: Invoices
 
     const years = [...new Set(invoices.map((i) => i.issueDate.slice(0, 4)))].sort().reverse()
 
+    const payStatus = (inv: Invoice): ComputedPaymentStatus =>
+        computePaymentStatus(inv, inv.totalPaid ?? 0, inv.totalCredit ?? 0)
+
     const visible = invoices.filter((inv) => {
+        const lateThreshold = profile?.lateInvoiceAlertDays ?? 30
         if (filterStatus === "overdue") {
-            if (!isOverdue(inv, profile?.lateInvoiceAlertDays ?? 30)) return false
-        } else if (filterStatus && inv.status !== filterStatus) {
-            return false
+            if (!isOverdue(inv, lateThreshold)) return false
+        } else if (filterStatus) {
+            if (payStatus(inv) !== filterStatus) return false
         }
         if (filterYear && !inv.issueDate.startsWith(filterYear)) return false
         if (filterClientId && inv.clientId !== Number(filterClientId)) return false
         return true
     })
 
-    const statusLabel = (s: string): string => ({
+    const statusLabel = (s: ComputedPaymentStatus): string => ({
         draft: t("invoices.statusDraft"),
-        sent: t("invoices.statusSent"),
+        unpaid: t("invoices.statusUnpaid"),
+        partial: t("invoices.statusPartial"),
         paid: t("invoices.statusPaid"),
-        overdue: t("invoices.statusOverdue"),
-        refused: t("invoices.statusRefused"),
-        cancelled: t("invoices.statusCancelled"),
+        credited: t("invoices.statusCredited"),
+        voided: t("invoices.statusVoided"),
     }[s] ?? s)
 
     return (
@@ -109,11 +114,12 @@ export function InvoicesList({ refreshKey, onNew, onImport, onSelect }: Invoices
                 >
                     <option value="">{t("invoices.filterAll")}</option>
                     <option value="draft">{t("invoices.statusDraft")}</option>
-                    <option value="sent">{t("invoices.statusSent")}</option>
-                    <option value="paid">{t("invoices.statusPaid")}</option>
+                    <option value="unpaid">{t("invoices.statusUnpaid")}</option>
                     <option value="overdue">{t("invoices.statusOverdue")}</option>
-                    <option value="refused">{t("invoices.statusRefused")}</option>
-                    <option value="cancelled">{t("invoices.statusCancelled")}</option>
+                    <option value="partial">{t("invoices.statusPartial")}</option>
+                    <option value="paid">{t("invoices.statusPaid")}</option>
+                    <option value="credited">{t("invoices.statusCredited")}</option>
+                    <option value="voided">{t("invoices.statusVoided")}</option>
                 </select>
 
                 <select
@@ -195,8 +201,8 @@ export function InvoicesList({ refreshKey, onNew, onImport, onSelect }: Invoices
                                         </td>
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-1.5">
-                                                <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", STATUS_COLORS[inv.status])}>
-                                                    {statusLabel(inv.status)}
+                                                <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", STATUS_COLORS[payStatus(inv)])}>
+                                                    {statusLabel(payStatus(inv))}
                                                 </span>
                                                 {isOverdue(inv, profile?.lateInvoiceAlertDays ?? 30) ? (
                                                     <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">

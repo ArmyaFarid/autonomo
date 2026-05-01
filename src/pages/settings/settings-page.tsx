@@ -4,7 +4,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { useAtom } from "jotai"
-import { Fingerprint, ImagePlus, Lock, LockOpen, Shield } from "lucide-react"
+import { Fingerprint, ImagePlus, Lock, LockOpen, Shield, FolderOpen, Info } from "lucide-react"
 import { cn } from "../../lib/utils"
 import { profileAtom } from "../../store/profileAtom"
 import type { Profile } from "../../types/definitions"
@@ -23,6 +23,7 @@ const profileSchema = z.object({
     defaultHourlyRate: z.coerce.number().min(0),
     invoiceStartNumber: z.coerce.number().int().min(1),
     invoiceNumberFormat: z.string().min(1),
+    invoicePrefix: z.string(),
     locale: z.enum(["fr-CA", "en-CA"]),
     backupIntervalDays: z.coerce.number().int().min(1),
     backupRetentionCount: z.coerce.number().int().min(1),
@@ -62,6 +63,7 @@ export function SettingsPage(): JSX.Element {
             defaultHourlyRate: 23,
             invoiceStartNumber: 1,
             invoiceNumberFormat: "YYYY-NNN",
+            invoicePrefix: "",
             locale: "fr-CA",
             backupIntervalDays: 7,
             backupRetentionCount: 1,
@@ -86,6 +88,7 @@ export function SettingsPage(): JSX.Element {
                 defaultHourlyRate: profile.defaultHourlyRate,
                 invoiceStartNumber: profile.invoiceStartNumber,
                 invoiceNumberFormat: profile.invoiceNumberFormat,
+                invoicePrefix: profile.invoicePrefix ?? "",
                 locale: (profile.locale as "fr-CA" | "en-CA") ?? "fr-CA",
                 backupIntervalDays: profile.backupIntervalDays,
                 backupRetentionCount: profile.backupRetentionCount,
@@ -292,14 +295,14 @@ export function SettingsPage(): JSX.Element {
                             <div className="space-y-4">
                                 <h3 className="border-b pb-2 text-base font-semibold">{t("settings.invoiceFormat")}</h3>
                                 <div className="grid grid-cols-2 gap-4">
-                                    <Field label={t("settings.invoiceFormat")} error={form.formState.errors.invoiceNumberFormat?.message}>
+                                    <Field label={t("settings.invoicePrefix")}>
                                         <input
-                                            {...form.register("invoiceNumberFormat")}
+                                            {...form.register("invoicePrefix")}
                                             className={inputCn}
-                                            placeholder="YYYY-NNN"
+                                            placeholder="FAC-"
                                         />
                                         <p className="text-muted-foreground mt-1 text-xs">
-                                            {t("settings.invoiceFormatHint")}
+                                            {t("settings.invoicePrefixHint")}
                                         </p>
                                     </Field>
                                     <Field label={t("settings.invoiceStartNumber")}>
@@ -311,6 +314,27 @@ export function SettingsPage(): JSX.Element {
                                         />
                                     </Field>
                                 </div>
+                                <InvoiceNumberPreview
+                                    prefix={form.watch("invoicePrefix") ?? ""}
+                                    startNumber={form.watch("invoiceStartNumber") ?? 1}
+                                />
+                                <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+                                    <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-amber-600" />
+                                    <p className="text-xs text-amber-700">{t("settings.invoicePrefixLegal")}</p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                                <h3 className="border-b pb-2 text-base font-semibold">{t("settings.taxData")}</h3>
+                                <p className="text-muted-foreground text-xs">{t("settings.taxFolderHint")}</p>
+                                <button
+                                    type="button"
+                                    onClick={async () => { await window.api.openTaxFolder() }}
+                                    className={`${outlineBtnCn} flex items-center gap-2`}
+                                >
+                                    <FolderOpen className="h-4 w-4" />
+                                    {t("settings.openTaxFolder")}
+                                </button>
                             </div>
 
                             <div className="space-y-4">
@@ -429,6 +453,24 @@ export function SettingsPage(): JSX.Element {
                 </div>
             )}
         </div>
+    )
+}
+
+interface InvoiceNumberPreviewProps {
+    prefix: string
+    startNumber: number
+}
+
+const InvoiceNumberPreview: React.FC<InvoiceNumberPreviewProps> = ({ prefix, startNumber }) => {
+    const { t } = useTranslation()
+    const year = new Date().getFullYear()
+    const seq = String(Math.max(1, startNumber)).padStart(4, "0")
+    const preview = `${prefix}${year}-${seq}`
+    return (
+        <p className="text-muted-foreground text-sm">
+            {t("settings.invoicePreview")}
+            <span className="font-mono font-semibold text-foreground">{preview}</span>
+        </p>
     )
 }
 

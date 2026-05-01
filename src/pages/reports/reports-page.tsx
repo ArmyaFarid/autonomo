@@ -5,7 +5,7 @@ import { useAtomValue } from "jotai"
 import { profileAtom } from "../../store/profileAtom"
 import { clientsAtom } from "../../store/clientsAtom"
 import { formatDate, cn } from "../../lib/utils"
-import type { Invoice, Expense, ExpenseCategory } from "../../types/definitions"
+import type { Expense, ExpenseCategory, PaymentReport } from "../../types/definitions"
 
 const CATEGORIES: ExpenseCategory[] = [
     "office_supplies", "telecom", "transport", "training", "equipment",
@@ -25,7 +25,7 @@ export function ReportsPage(): JSX.Element {
     const locale = profile?.locale ?? "fr-CA"
 
     const [year, setYear] = useState(new Date().getFullYear())
-    const [invoices, setInvoices] = useState<Invoice[]>([])
+    const [yearPayments, setYearPayments] = useState<PaymentReport[]>([])
     const [expenses, setExpenses] = useState<Expense[]>([])
     const [loading, setLoading] = useState(true)
     const [exportMsg, setExportMsg] = useState("")
@@ -36,11 +36,11 @@ export function ReportsPage(): JSX.Element {
     useEffect(() => {
         async function load(): Promise<void> {
             setLoading(true)
-            const [invRes, expRes] = await Promise.all([
-                window.api.getInvoices({ year, status: "paid" }),
+            const [payRes, expRes] = await Promise.all([
+                window.api.getPaymentsByYear(year),
                 window.api.getExpenses({ year }),
             ])
-            if (invRes.success && invRes.data) setInvoices(invRes.data as Invoice[])
+            if (payRes.success && payRes.data) setYearPayments(payRes.data as PaymentReport[])
             if (expRes.success && expRes.data) setExpenses(expRes.data as Expense[])
             setLoading(false)
         }
@@ -50,8 +50,15 @@ export function ReportsPage(): JSX.Element {
     const fmt = (n: number): string =>
         locale.startsWith("en") ? `$${n.toFixed(2)}` : `${n.toFixed(2).replace(".", ",")} $`
 
-    // Revenue totals
-    const totalRevenue = invoices.reduce((sum, inv) => sum + inv.total, 0)
+    // Cash received per invoice (group payments by invoice)
+    const byInvoice = new Map<number, { number: string; clientId: number; issueDate: string; received: number }>()
+    for (const p of yearPayments) {
+        const entry = byInvoice.get(p.invoiceId) ?? { number: p.invoiceNumber, clientId: p.clientId, issueDate: p.issueDate, received: 0 }
+        entry.received += p.amount
+        byInvoice.set(p.invoiceId, entry)
+    }
+    const invoiceRevenues = [...byInvoice.values()]
+    const totalRevenue = yearPayments.reduce((sum, p) => sum + p.amount, 0)
 
     // Expenses by category
     const byCategory = CATEGORIES.reduce<Record<string, { amount: number; deductible: number }>>((acc, cat) => {
@@ -135,7 +142,7 @@ export function ReportsPage(): JSX.Element {
                         <h3 className="mb-3 border-b pb-2 text-sm font-semibold">
                             {t("reports.totalRevenue")} — {year}
                         </h3>
-                        {invoices.length === 0 ? (
+                        {invoiceRevenues.length === 0 ? (
                             <p className="text-muted-foreground text-sm">{t("reports.noRevenue")}</p>
                         ) : (
                             <table className="w-full text-sm">
@@ -148,14 +155,14 @@ export function ReportsPage(): JSX.Element {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
-                                    {invoices.map((inv) => {
+                                    {invoiceRevenues.map((inv) => {
                                         const client = clientMap.get(inv.clientId)
                                         return (
-                                            <tr key={inv.id} className="hover:bg-muted/30">
+                                            <tr key={inv.number} className="hover:bg-muted/30">
                                                 <td className="py-2 pr-4 font-mono text-xs">{inv.number}</td>
                                                 <td className="py-2 pr-4">{client?.companyName ?? client?.name ?? "—"}</td>
                                                 <td className="py-2 pr-4 tabular-nums">{formatDate(inv.issueDate, locale)}</td>
-                                                <td className="py-2 text-right tabular-nums">{fmt(inv.total)}</td>
+                                                <td className="py-2 text-right tabular-nums">{fmt(inv.received)}</td>
                                             </tr>
                                         )
                                     })}
