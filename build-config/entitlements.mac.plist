@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <!-- Core Electron / V8 Engine -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.debugger</key>
+    <true/>
+
+    <!-- Required for better-sqlite3 / native modules -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+
+    <!-- Biometrics (Touch ID) -->
+    <key>com.apple.security.device.biometrics</key>
+    <true/>
+
+    <!-- File System Access -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+    <key>com.apple.security.files.downloads.read-write</key>
+    <true/>
+
+    <!-- App Sandbox (Required for most hardened apps) -->
+  </dict>
+</plist>
