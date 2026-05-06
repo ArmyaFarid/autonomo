@@ -137,7 +137,7 @@ let rawDb: Database.Database | null = null
 export function getDataRootPath(): string {
     if (is.dev) return join(app.getAppPath(), "dev-data")
     const documentsPath = app.getPath("documents")
-    return join(documentsPath, "ArmyaFacturation")
+    return join(documentsPath, "Autonomo")
 }
 
 export function initDatabase(skipStaleCleanup = false): void {
@@ -146,7 +146,7 @@ export function initDatabase(skipStaleCleanup = false): void {
         mkdirSync(dataPath, { recursive: true })
     }
 
-    const dbPath = join(dataPath, "armya.db")
+    const dbPath = join(dataPath, "autonomo.db")
     rawDb = new Database(dbPath)
     rawDb.pragma("journal_mode = WAL")
     rawDb.pragma("foreign_keys = ON")

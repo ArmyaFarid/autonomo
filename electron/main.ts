@@ -44,7 +44,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-    electronApp.setAppUserModelId("com.armya.facturation")
+    electronApp.setAppUserModelId("com.armyabakouan.autonomo")
 
     app.on("browser-window-created", (_, window) => {
         optimizer.watchWindowShortcuts(window)

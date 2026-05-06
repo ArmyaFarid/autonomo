@@ -161,7 +161,7 @@ export function SettingsPage(): JSX.Element {
     async function handleExportBackup(): Promise<void> {
         const date = new Date().toISOString().split("T")[0]
         const saveResult = await window.api.saveFileDialog({
-            defaultPath: `armya-backup-${date}.zip`,
+            defaultPath: `autonomo-backup-${date}.zip`,
             filters: [{ name: "Backup", extensions: ["zip"] }],
         })
         if (!saveResult.success || !saveResult.data) return
@@ -201,7 +201,7 @@ export function SettingsPage(): JSX.Element {
                                 <input
                                     {...form.register("name")}
                                     className={inputCn}
-                                    placeholder="Armya Bakouan"
+                                    placeholder="Jon Doe"
                                 />
                             </Field>
                             <Field label={`${t("setup.address")} *`} error={form.formState.errors.address?.message}>

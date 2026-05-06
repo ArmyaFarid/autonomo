@@ -1,5 +1,5 @@
-appId: com.armyabakouan.easyFreelancer
-productName: vue-ts
+appId: com.armyabakouan.autonomo
+productName: Autonomo
 directories:
   buildResources: build
 files:
@@ -11,9 +11,8 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
-#afterSign: build/notarize.js
 win:
-  executableName: vue-ts
+  executableName: Autonomo
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
@@ -21,26 +20,14 @@ nsis:
   createDesktopShortcut: always
 mac:
   identity: null
-  cscLink: null
+  icon: build/icon.icns
   entitlements: build-config/entitlements.mac.plist
   entitlementsInherit: build-config/entitlements.mac.plist
-  hardenedRuntime: true
+  hardenedRuntime: false
   extendInfo:
-    - NSFaceIDUsageDescription: "This app uses Touch ID to securely access your invoicing data."
     - NSDocumentsFolderUsageDescription: "This app needs access to your Documents folder to save and manage invoices."
     - NSDownloadsFolderUsageDescription: "This app needs access to your Downloads folder to export PDF reports."
 dmg:
   artifactName: ${name}-${version}.${ext}
-linux:
-  target:
-    - AppImage
-    - snap
-    - deb
-  maintainer: electronjs.org
-  category: Utility
-appImage:
-  artifactName: ${name}-${version}.${ext}
 npmRebuild: false
-publish:
-  provider: generic
-  url: https://example.com/auto-updates
+publish: null

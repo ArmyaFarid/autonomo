@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { Fingerprint, Lock } from "lucide-react"
+import logo from "../../assets/logo.png"
 
 interface LockScreenProps {
     onUnlock: () => void
@@ -66,10 +67,13 @@ export function LockScreen({ onUnlock, touchIdEnabled = false }: LockScreenProps
         <div className="flex h-screen flex-col items-center justify-center bg-background">
             <div className="w-full max-w-sm space-y-6 px-6">
                 <div className="flex flex-col items-center gap-3">
-                    <div className="rounded-full bg-muted p-4">
-                        <Lock className="h-8 w-8 text-muted-foreground" />
+                    <div className="relative">
+                        <img src={logo} alt="Autonomo" className="h-16 w-16 rounded-2xl" />
+                        <div className="bg-background absolute -bottom-1 -right-1 rounded-full p-1">
+                            <Lock className="h-4 w-4 text-muted-foreground" />
+                        </div>
                     </div>
-                    <h1 className="text-xl font-semibold">Armya Facturation</h1>
+                    <h1 className="text-xl font-semibold">Autonomo</h1>
                     <p className="text-muted-foreground text-sm">{t("security.enterPin")}</p>
                 </div>
 

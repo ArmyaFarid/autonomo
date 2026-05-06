@@ -11,7 +11,7 @@ function getBackupsDir(): string {
 }
 
 function getDbPath(): string {
-    return join(getDataRootPath(), "armya.db")
+    return join(getDataRootPath(), "autonomo.db")
 }
 
 function getAttachmentsPath(): string {
@@ -24,7 +24,7 @@ function computeChecksum(filePath: string): string {
 }
 
 function buildZip(destPath: string): void {
-    // Force WAL checkpoint so armya.db on disk has all committed data
+    // Force WAL checkpoint so autonomo.db on disk has all committed data
     try { getRawDb().pragma("wal_checkpoint(FULL)") } catch { /* no-op if not initialized */ }
 
     const zip = new AdmZip()
@@ -48,7 +48,7 @@ function createBackupZip(backupsDir: string, retentionCount: number): string {
     if (!existsSync(backupsDir)) mkdirSync(backupsDir, { recursive: true })
 
     const date = new Date().toISOString().split("T")[0]
-    const zipPath = join(backupsDir, `armya-backup-${date}.zip`)
+    const zipPath = join(backupsDir, `autonomo-backup-${date}.zip`)
 
     buildZip(zipPath)
     pruneOldBackups(backupsDir, retentionCount)
@@ -132,7 +132,7 @@ export function registerBackupHandlers(): void {
             if (!manifest.schemaVersion) return { success: false, error: "Invalid manifest format" }
 
             closeDatabase()
-            // Remove WAL sidecar files so the restored armya.db is used as-is
+            // Remove WAL sidecar files so the restored autonomo.db is used as-is
             const walPath = getDbPath() + "-wal"
             const shmPath = getDbPath() + "-shm"
             if (existsSync(walPath)) rmSync(walPath)

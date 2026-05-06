@@ -72,7 +72,7 @@ export function registerProfileHandlers(): void {
 
     ipcMain.handle("auth:promptTouchId", async () => {
         try {
-            await systemPreferences.promptTouchID("déverrouiller Armya Facturation")
+            await systemPreferences.promptTouchID("déverrouiller Autonomo")
             return { success: true }
         } catch (error) {
             return { success: false, error: String(error) }

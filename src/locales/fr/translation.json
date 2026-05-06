@@ -8,7 +8,7 @@
         "settings": "Paramètres"
     },
     "firstLaunch": {
-        "title": "Bienvenue dans Armya Facturation",
+        "title": "Bienvenue dans Autonomo",
         "subtitle": "Configurer votre installation",
         "newInstall": "Nouvelle installation",
         "newInstallDesc": "Commencer avec une base de données vierge et configurer votre profil.",
@@ -22,7 +22,7 @@
         "title": "Configuration du profil",
         "subtitle": "Ces informations apparaîtront sur vos factures.",
         "name": "Nom complet",
-        "namePlaceholder": "Armya Bakouan",
+        "namePlaceholder": "Jean Dupont",
         "address": "Adresse",
         "addressPlaceholder": "123 Rue Principale, Montréal, QC H2X 1Y7",
         "phone": "Téléphone",

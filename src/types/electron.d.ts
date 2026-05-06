@@ -5,3 +5,8 @@ declare global {
         api: ElectronAPI
     }
 }
+
+declare module "*.png" {
+    const src: string
+    export default src
+}

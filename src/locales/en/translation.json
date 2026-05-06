@@ -8,7 +8,7 @@
         "settings": "Settings"
     },
     "firstLaunch": {
-        "title": "Welcome to Armya Facturation",
+        "title": "Welcome to Autonomo",
         "subtitle": "Set up your installation",
         "newInstall": "New installation",
         "newInstallDesc": "Start with a fresh database and set up your profile.",
@@ -22,7 +22,7 @@
         "title": "Profile setup",
         "subtitle": "This information will appear on your invoices.",
         "name": "Full name",
-        "namePlaceholder": "Armya Bakouan",
+        "namePlaceholder": "Jon Doe",
         "address": "Address",
         "addressPlaceholder": "123 Main Street, Montreal, QC H2X 1Y7",
         "phone": "Phone",

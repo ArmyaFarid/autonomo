@@ -9,6 +9,7 @@ import {
     Settings,
     CheckCircle,
 } from "lucide-react"
+import logo from "../../assets/logo.png"
 import { cn } from "../../lib/utils"
 import { useSetAtom, useAtom } from "jotai"
 import { clientsAtom } from "../../store/clientsAtom"
@@ -77,10 +78,13 @@ export function MainLayout(): JSX.Element {
     return (
         <div className="flex h-screen overflow-hidden bg-background">
             <aside className="bg-card border-border flex w-56 flex-col border-r">
-                <div className="border-border border-b px-4 py-5">
-                    <h1 className="text-primary text-sm font-bold tracking-wide uppercase">
-                        Armya Facturation
-                    </h1>
+                <div className="border-border border-b px-4 py-4">
+                    <div className="flex items-center gap-2">
+                        <img src={logo} alt="Autonomo" className="h-7 w-7 rounded-md" />
+                        <h1 className="text-primary text-sm font-bold tracking-wide uppercase">
+                            Autonomo
+                        </h1>
+                    </div>
                 </div>
 
                 <nav className="flex-1 space-y-0.5 p-2 pt-3">
