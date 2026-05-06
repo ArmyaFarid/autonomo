@@ -23,6 +23,11 @@ export function toIsoDate(date: Date): string {
     return date.toISOString().split("T")[0]
 }
 
+export function maskPostalCode(raw: string): string {
+    const clean = raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6)
+    return clean.length > 3 ? `${clean.slice(0, 3)} ${clean.slice(3)}` : clean
+}
+
 export function daysSince(dateStr: string): number {
     const [y, m, d] = dateStr.split("-").map(Number)
     const then = new Date(y, m - 1, d)

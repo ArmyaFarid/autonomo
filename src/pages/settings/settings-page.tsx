@@ -8,14 +8,12 @@ import { Fingerprint, ImagePlus, Lock, LockOpen, Shield, FolderOpen, Info } from
 import { cn } from "../../lib/utils"
 import { profileAtom } from "../../store/profileAtom"
 import type { Profile } from "../../types/definitions"
+import { AddressBlock } from "../../components/shared/address-block"
+import type { AddressValue } from "../../components/shared/address-block"
 
 const profileSchema = z.object({
     name: z.string().min(1),
-    address: z.string().min(1),
-    city: z.string().optional(),
-    province: z.string().optional(),
     country: z.string().optional(),
-    postalCode: z.string().optional(),
     phone: z.string().optional(),
     email: z.string().email().optional().or(z.literal("")),
     gstNumber: z.string().optional(),
@@ -41,6 +39,8 @@ export function SettingsPage(): JSX.Element {
     const [saved, setSaved] = useState(false)
     const [error, setError] = useState("")
     const [logoPath, setLogoPath] = useState<string | null>(null)
+    const [address, setAddress] = useState<AddressValue>({ line1: "", line2: "", city: "", province: "QC", postalCode: "" })
+    const [addressError, setAddressError] = useState("")
     const [backingUp, setBackingUp] = useState(false)
     const [backupMsg, setBackupMsg] = useState("")
     const [restoring, setRestoring] = useState(false)
@@ -51,11 +51,7 @@ export function SettingsPage(): JSX.Element {
         resolver: zodResolver(profileSchema),
         defaultValues: {
             name: "",
-            address: "",
-            city: "",
-            province: "",
             country: "",
-            postalCode: "",
             phone: "",
             email: "",
             gstNumber: "",
@@ -76,11 +72,7 @@ export function SettingsPage(): JSX.Element {
         if (profile) {
             form.reset({
                 name: profile.name,
-                address: profile.address,
-                city: profile.city ?? "",
-                province: profile.province ?? "",
                 country: profile.country ?? "",
-                postalCode: profile.postalCode ?? "",
                 phone: profile.phone ?? "",
                 email: profile.email ?? "",
                 gstNumber: profile.gstNumber ?? "",
@@ -96,16 +88,33 @@ export function SettingsPage(): JSX.Element {
                 taxReserveRate: Math.round(profile.taxReserveRate * 100),
             })
             setLogoPath(profile.logoPath)
+            setAddress({
+                line1: profile.address,
+                line2: profile.addressLine2 ?? "",
+                city: profile.city ?? "",
+                province: profile.province ?? "QC",
+                postalCode: profile.postalCode ?? "",
+            })
         }
     }, [profile])
 
     async function handleSubmit(values: ProfileFormValues): Promise<void> {
+        if (!address.line1.trim()) {
+            setAddressError(t("setup.required"))
+            return
+        }
+        setAddressError("")
         setSaving(true)
         setSaved(false)
         setError("")
 
         const result = await window.api.saveProfile({
             ...values,
+            address: address.line1.trim(),
+            addressLine2: address.line2.trim() || null,
+            city: address.city.trim() || null,
+            province: address.province || null,
+            postalCode: address.postalCode.trim() || null,
             taxReserveRate: values.taxReserveRate / 100,
             logoPath,
         })
@@ -207,25 +216,15 @@ export function SettingsPage(): JSX.Element {
                                     placeholder="Jon Doe"
                                 />
                             </Field>
-                            <Field label={`${t("setup.address")} *`} error={form.formState.errors.address?.message}>
-                                <textarea {...form.register("address")} rows={2} className={textareaCn} />
+                            <AddressBlock
+                                value={address}
+                                onChange={setAddress}
+                                line1Error={addressError}
+                                required
+                            />
+                            <Field label={t("setup.country")}>
+                                <input {...form.register("country")} className={inputCn} placeholder="Canada" />
                             </Field>
-                            <div className="grid grid-cols-2 gap-4">
-                                <Field label={t("setup.city")}>
-                                    <input {...form.register("city")} className={inputCn} placeholder="Chicoutimi" />
-                                </Field>
-                                <Field label={t("setup.province")}>
-                                    <input {...form.register("province")} className={inputCn} placeholder="QC" />
-                                </Field>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <Field label={t("setup.postalCode")}>
-                                    <input {...form.register("postalCode")} className={inputCn} placeholder="G7J 1G6" />
-                                </Field>
-                                <Field label={t("setup.country")}>
-                                    <input {...form.register("country")} className={inputCn} placeholder="Canada" />
-                                </Field>
-                            </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <Field label={t("setup.phone")}>
                                     <input {...form.register("phone")} className={inputCn} />

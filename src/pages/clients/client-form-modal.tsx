@@ -5,11 +5,12 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { X } from "lucide-react"
 import type { Client } from "../../types/definitions"
+import { AddressBlock } from "../../components/shared/address-block"
+import type { AddressValue } from "../../components/shared/address-block"
 
 const clientSchema = z.object({
     name: z.string().min(1),
     companyName: z.string().optional(),
-    address: z.string().min(1),
     phone: z.string().optional(),
     email: z.string().email().optional().or(z.literal("")),
     primaryContact: z.string().optional(),
@@ -32,14 +33,22 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({ client, onSave
     const { t } = useTranslation()
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState("")
+    const [addressError, setAddressError] = useState("")
     const isEdit = client !== null
+
+    const [address, setAddress] = useState<AddressValue>({
+        line1: "",
+        line2: "",
+        city: "",
+        province: "QC",
+        postalCode: "",
+    })
 
     const form = useForm<ClientFormValues>({
         resolver: zodResolver(clientSchema),
         defaultValues: {
             name: "",
             companyName: "",
-            address: "",
             phone: "",
             email: "",
             primaryContact: "",
@@ -58,7 +67,6 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({ client, onSave
             form.reset({
                 name: client.name,
                 companyName: client.companyName ?? "",
-                address: client.address,
                 phone: client.phone ?? "",
                 email: client.email ?? "",
                 primaryContact: client.primaryContact ?? "",
@@ -68,15 +76,32 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({ client, onSave
                 billingFrequency: client.billingFrequency as "biweekly" | "monthly" | "one-time",
                 notes: client.notes ?? "",
             })
+            setAddress({
+                line1: client.address,
+                line2: client.addressLine2 ?? "",
+                city: client.city ?? "",
+                province: client.province ?? "QC",
+                postalCode: client.postalCode ?? "",
+            })
         }
     }, [client])
 
     async function handleSubmit(values: ClientFormValues): Promise<void> {
+        if (!address.line1.trim()) {
+            setAddressError(t("setup.required"))
+            return
+        }
+        setAddressError("")
         setLoading(true)
         setError("")
 
         const payload = {
             ...values,
+            address: address.line1.trim(),
+            addressLine2: address.line2.trim() || null,
+            city: address.city.trim() || null,
+            province: address.province || null,
+            postalCode: address.postalCode.trim() || null,
             companyName: values.companyName || null,
             phone: values.phone || null,
             email: values.email || null,
@@ -121,9 +146,12 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({ client, onSave
                             </Field>
                         </div>
 
-                        <Field label={`${t("clients.address")} *`} error={form.formState.errors.address?.message}>
-                            <textarea {...form.register("address")} rows={2} className={textareaCn} />
-                        </Field>
+                        <AddressBlock
+                            value={address}
+                            onChange={setAddress}
+                            line1Error={addressError}
+                            required
+                        />
 
                         <div className="grid grid-cols-2 gap-4">
                             <Field label={t("clients.phone")}>

@@ -130,7 +130,8 @@ export function CreateInvoiceForm({ invoice, invoiceLines: editLines, onSaved, o
     const profile = useAtomValue(profileAtom)
     const locale = profile?.locale ?? "fr-CA"
     const activeClients = clients.filter((c) => c.active === 1)
-    const editMode = !!invoice
+    const [currentInvoice, setCurrentInvoice] = useState<Invoice | null>(invoice ?? null)
+    const editMode = !!currentInvoice
     const defaultRate = profile?.defaultHourlyRate ?? 23
 
     const initType = (invoice?.invoiceType ?? "weekly") as "weekly" | "freeform"
@@ -204,7 +205,7 @@ export function CreateInvoiceForm({ invoice, invoiceLines: editLines, onSaved, o
     const total = subtotal + gstAmount + qstAmount
 
     useEffect(() => {
-        if (editMode) { setNextNumber(invoice!.number); return }
+        if (editMode) { setNextNumber(currentInvoice!.number); return }
         window.api.getNextInvoiceNumber().then((res) => {
             if (res.success && res.data) setNextNumber(res.data as string)
         })
@@ -315,7 +316,7 @@ export function CreateInvoiceForm({ invoice, invoiceLines: editLines, onSaved, o
         setLoading(true)
 
         const invoiceData = {
-            number: nextNumber,
+            number: editMode ? currentInvoice!.number : `DRAFT-${Date.now()}`,
             clientId: Number(values.clientId),
             issueDate: values.issueDate,
             periodStart: values.periodStart,
@@ -352,7 +353,7 @@ export function CreateInvoiceForm({ invoice, invoiceLines: editLines, onSaved, o
             }))
 
         const result = editMode
-            ? await window.api.updateInvoice(invoice!.id, { invoice: invoiceData, lines })
+            ? await window.api.updateInvoice(currentInvoice!.id, { invoice: invoiceData, lines })
             : await window.api.createInvoice({ invoice: invoiceData, lines })
 
         if (result.success) {
@@ -372,15 +373,14 @@ export function CreateInvoiceForm({ invoice, invoiceLines: editLines, onSaved, o
     async function handleSaveAndPreview(): Promise<void> {
         const saved = await submit(form.getValues(), "draft")
         if (!saved) return
+        setCurrentInvoice(saved)
         const pdfResult = await window.api.generateInvoicePdf(saved.id)
+        setLoading(false)
         if (pdfResult.success && pdfResult.data) {
             await window.api.openPath(pdfResult.data as string)
         } else if (!pdfResult.success) {
             setError(pdfResult.error ?? t("invoices.pdfError"))
-            setLoading(false)
-            return
         }
-        onSaved()
     }
 
     const fmt = (n: number): string =>

@@ -8,6 +8,7 @@ export interface Profile {
     id: number
     name: string
     address: string
+    addressLine2: string | null
     appPin: string | null
     touchIdEnabled: number
     phone: string | null
@@ -38,6 +39,10 @@ export interface Client {
     name: string
     companyName: string | null
     address: string
+    addressLine2: string | null
+    city: string | null
+    province: string | null
+    postalCode: string | null
     phone: string | null
     email: string | null
     primaryContact: string | null

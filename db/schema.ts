@@ -10,6 +10,7 @@ export const profile = sqliteTable("profile", {
     id: integer("id").primaryKey(),
     name: text("name").notNull(),
     address: text("address").notNull(),
+    addressLine2: text("address_line2"),
     appPin: text("app_pin"),
     touchIdEnabled: integer("touch_id_enabled").notNull().default(0),
     phone: text("phone"),
@@ -70,6 +71,10 @@ export const clients = sqliteTable("clients", {
     name: text("name").notNull(),
     companyName: text("company_name"),
     address: text("address").notNull(),
+    addressLine2: text("address_line2"),
+    city: text("city"),
+    province: text("province"),
+    postalCode: text("postal_code"),
     phone: text("phone"),
     email: text("email"),
     primaryContact: text("primary_contact"),
@@ -380,6 +385,11 @@ function runMigrations(db: Database.Database, skipStaleCleanup = false): void {
         `ALTER TABLE invoices ADD COLUMN credited_pdf_path TEXT`,
         `ALTER TABLE payments ADD COLUMN receipt_number TEXT`,
         `ALTER TABLE payments ADD COLUMN receipt_path TEXT`,
+        `ALTER TABLE profile ADD COLUMN address_line2 TEXT`,
+        `ALTER TABLE clients ADD COLUMN address_line2 TEXT`,
+        `ALTER TABLE clients ADD COLUMN city TEXT`,
+        `ALTER TABLE clients ADD COLUMN province TEXT`,
+        `ALTER TABLE clients ADD COLUMN postal_code TEXT`,
     ]) {
         try { db.exec(sql) } catch { /* already exists */ }
     }

@@ -322,6 +322,16 @@
         "taxableIncome": "Revenu net imposable",
         "ytdDeductible": "Dépenses déductibles"
     },
+    "address": {
+        "line1": "Adresse (ligne 1)",
+        "line1Placeholder": "123 Rue Principale",
+        "line2": "App., suite, unité (optionnel)",
+        "line2Placeholder": "App. 4B",
+        "city": "Ville",
+        "cityPlaceholder": "Montréal",
+        "province": "Province",
+        "postalCode": "Code postal"
+    },
     "settings": {
         "title": "Paramètres",
         "profile": "Profil",

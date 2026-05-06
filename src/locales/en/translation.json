@@ -322,6 +322,16 @@
         "taxableIncome": "Net taxable income",
         "ytdDeductible": "Deductible expenses"
     },
+    "address": {
+        "line1": "Address (line 1)",
+        "line1Placeholder": "123 Main Street",
+        "line2": "Apt., suite, unit (optional)",
+        "line2Placeholder": "Apt. 4B",
+        "city": "City",
+        "cityPlaceholder": "Montreal",
+        "province": "Province",
+        "postalCode": "Postal code"
+    },
     "settings": {
         "title": "Settings",
         "profile": "Profile",

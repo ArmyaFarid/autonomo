@@ -110,7 +110,7 @@ export function ImportInvoiceForm({ onSaved, onCancel }: ImportInvoiceFormProps)
         if (numberCheckRef.current) clearTimeout(numberCheckRef.current)
         numberCheckRef.current = setTimeout(async () => {
             const res = await window.api.checkInvoiceNumberExists(numberValue.trim())
-            setNumberExists(res.success && !!res.data)
+            setNumberExists(res.success && !!(res.data as { exists: boolean })?.exists)
         }, 400)
     }, [numberValue])
 
@@ -394,10 +394,10 @@ export function ImportInvoiceForm({ onSaved, onCancel }: ImportInvoiceFormProps)
                             </div>
                             <Field label={t("invoices.legacyPaymentMethod")}>
                                 <select {...form.register("paymentMethod")} className={selectCn}>
-                                    <option value="wire">{t("payments.methodWire")}</option>
-                                    <option value="cheque">{t("payments.methodCheque")}</option>
-                                    <option value="interac">{t("payments.methodInterac")}</option>
-                                    <option value="other">{t("payments.methodOther")}</option>
+                                    <option value="wire">{t("payments.methods.wire")}</option>
+                                    <option value="cheque">{t("payments.methods.cheque")}</option>
+                                    <option value="interac">{t("payments.methods.interac")}</option>
+                                    <option value="other">{t("payments.methods.other")}</option>
                                 </select>
                             </Field>
                             <Field label={t("invoices.legacyPaymentProof")}>

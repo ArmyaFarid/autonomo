@@ -7,6 +7,15 @@ import { existsSync, mkdirSync, readFileSync } from "fs"
 import puppeteer from "puppeteer"
 import { buildSlug } from "./utils"
 
+function buildClientAddress(client: Record<string, unknown>): string {
+    const lines: string[] = []
+    if (client.address) lines.push(String(client.address))
+    if (client.addressLine2) lines.push(String(client.addressLine2))
+    const cityLine = [client.city, client.province, client.postalCode].filter(Boolean).join(" ")
+    if (cityLine) lines.push(cityLine)
+    return lines.join("<br>")
+}
+
 function formatDate(dateStr: string, locale: string): string {
     const [year, month, day] = dateStr.split("-").map(Number)
     const date = new Date(year, month - 1, day)
@@ -142,9 +151,8 @@ export async function generateInvoicePdf(invoiceId: number, options: GeneratePdf
     const logoBlock = prof.logoPath ? `<img src="file://${prof.logoPath}" alt="Logo" />` : ""
 
     const issuerLines: string[] = [prof.name]
-    for (const line of (prof.address ?? "").split("\n")) {
-        if (line.trim()) issuerLines.push(line.trim())
-    }
+    if (prof.address?.trim()) issuerLines.push(prof.address.trim())
+    if (prof.addressLine2?.trim()) issuerLines.push(prof.addressLine2.trim())
     const cityLine = [prof.city, prof.province, prof.postalCode].filter(Boolean).join(" ")
     if (cityLine) issuerLines.push(cityLine)
     if (prof.country) issuerLines.push(prof.country)
@@ -163,7 +171,7 @@ export async function generateInvoicePdf(invoiceId: number, options: GeneratePdf
         "{{logoBlock}}": logoBlock,
         "{{issuerBlock}}": issuerBlock,
         "{{clientName}}": client.companyName ?? client.name,
-        "{{clientAddress}}": (client.address ?? "").replace(/\n/g, "<br>"),
+        "{{clientAddress}}": buildClientAddress(client as Record<string, unknown>),
         "{{date}}": formatDate(invoice.issueDate, locale),
         "{{dueDateBlock}}": dueDateBlock,
         "{{number}}": invoice.number,
