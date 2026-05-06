@@ -442,22 +442,20 @@ export function CreateInvoiceForm({ invoice, invoiceLines: editLines, onSaved, o
                 </h2>
                 <p className="text-muted-foreground text-sm">N° {nextNumber}</p>
             </div>
-            {!editMode ? (
-                <button
-                    type="button"
-                    onClick={() => setShowPreview((v) => !v)}
-                    title="Aperçu en direct"
-                    className={cn(
-                        "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors",
-                        showPreview
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-input bg-background text-muted-foreground hover:text-foreground"
-                    )}
-                >
-                    <Columns2 className="h-4 w-4" />
-                    Aperçu
-                </button>
-            ) : null}
+            <button
+                type="button"
+                onClick={() => setShowPreview((v) => !v)}
+                title="Aperçu en direct"
+                className={cn(
+                    "flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors",
+                    showPreview
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-input bg-background text-muted-foreground hover:text-foreground"
+                )}
+            >
+                <Columns2 className="h-4 w-4" />
+                Aperçu
+            </button>
         </div>
     )
 

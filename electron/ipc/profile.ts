@@ -2,6 +2,8 @@ import { ipcMain, dialog, shell, BrowserWindow, systemPreferences } from "electr
 import { eq } from "drizzle-orm"
 import { getDb, getDataRootPath, profile } from "../../db/schema"
 import { randomBytes, scryptSync, timingSafeEqual } from "crypto"
+import { join } from "path"
+import { existsSync, mkdirSync } from "fs"
 
 function hashPin(pin: string): string {
     const salt = randomBytes(16).toString("hex")
@@ -181,4 +183,18 @@ export function registerProfileHandlers(): void {
             return { success: false, error: String(error) }
         }
     })
+
+    // Phase 3 — open the tax exports folder in Finder/Explorer
+    ipcMain.handle("shell:openTaxFolder", async () => {
+        try {
+            const exportsDir = join(getDataRootPath(), "exports")
+            if (!existsSync(exportsDir)) mkdirSync(exportsDir, { recursive: true })
+            const errMsg = await shell.openPath(exportsDir)
+            if (errMsg) return { success: false, error: errMsg }
+            return { success: true, data: exportsDir }
+        } catch (error) {
+            return { success: false, error: String(error) }
+        }
+    })
+
 }

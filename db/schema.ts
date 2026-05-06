@@ -19,6 +19,7 @@ export const profile = sqliteTable("profile", {
     defaultHourlyRate: real("default_hourly_rate").notNull().default(23),
     invoiceStartNumber: integer("invoice_start_number").notNull().default(1),
     invoiceNumberFormat: text("invoice_number_format").notNull().default("YYYY-NNN"),
+    invoicePrefix: text("invoice_prefix").notNull().default(""),
     city: text("city"),
     province: text("province"),
     country: text("country"),
@@ -32,6 +33,36 @@ export const profile = sqliteTable("profile", {
     taxReserveRate: real("tax_reserve_rate").notNull().default(0.20),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
+})
+
+// Phase 0 — annual sequence tracker (one row per calendar year)
+export const invoiceSequences = sqliteTable("invoice_sequences", {
+    year: integer("year").primaryKey(),
+    lastSequenceNumber: integer("last_sequence_number").notNull().default(0),
+})
+
+// Phase 1 — credit notes (append-only; reduce balance-due without touching cash flow)
+export const creditNotes = sqliteTable("credit_notes", {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    invoiceId: integer("invoice_id").notNull().references(() => invoices.id),
+    number: text("number"),
+    amount: real("amount").notNull(),
+    reason: text("reason").notNull(),
+    pdfPath: text("pdf_path"),
+    createdAt: text("created_at").notNull(),
+})
+
+// Phase 3 — immutable financial ledger (INSERT only; never UPDATE or DELETE)
+export const financialLedger = sqliteTable("financial_ledger", {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    eventType: text("event_type").notNull(), // invoice_issued | payment_received | credit_note | refund
+    invoiceId: integer("invoice_id").notNull(),
+    invoiceNumber: text("invoice_number").notNull(),
+    clientName: text("client_name").notNull(),
+    amount: real("amount").notNull(),
+    runningTotal: real("running_total").notNull(),
+    year: integer("year").notNull(),
+    createdAt: text("created_at").notNull(),
 })
 
 export const clients = sqliteTable("clients", {
@@ -73,6 +104,7 @@ export const invoices = sqliteTable("invoices", {
     status: text("status").notNull().default("draft"),
     notes: text("notes"),
     pdfPath: text("pdf_path"),
+    creditedPdfPath: text("credited_pdf_path"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
 })
@@ -113,6 +145,8 @@ export const payments = sqliteTable("payments", {
     reference: text("reference"),
     notes: text("notes"),
     proofPath: text("proof_path"),
+    receiptNumber: text("receipt_number"),
+    receiptPath: text("receipt_path"),
     createdAt: text("created_at").notNull(),
 })
 
@@ -296,6 +330,40 @@ function runMigrations(db: Database.Database, skipStaleCleanup = false): void {
         );
     `)
 
+    // Phase 0 — invoice sequence tracker
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS invoice_sequences (
+            year INTEGER PRIMARY KEY,
+            last_sequence_number INTEGER NOT NULL DEFAULT 0
+        );
+    `)
+
+    // Phase 1 — credit notes
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS credit_notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            invoice_id INTEGER NOT NULL REFERENCES invoices(id),
+            amount REAL NOT NULL,
+            reason TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+    `)
+
+    // Phase 3 — immutable financial ledger
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS financial_ledger (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type TEXT NOT NULL,
+            invoice_id INTEGER NOT NULL,
+            invoice_number TEXT NOT NULL,
+            client_name TEXT NOT NULL,
+            amount REAL NOT NULL,
+            running_total REAL NOT NULL,
+            year INTEGER NOT NULL,
+            created_at TEXT NOT NULL
+        );
+    `)
+
     // Idempotent profile columns (existing databases)
     for (const sql of [
         `ALTER TABLE profile ADD COLUMN city TEXT`,
@@ -306,12 +374,59 @@ function runMigrations(db: Database.Database, skipStaleCleanup = false): void {
         `ALTER TABLE invoices ADD COLUMN due_date TEXT`,
         `ALTER TABLE profile ADD COLUMN app_pin TEXT`,
         `ALTER TABLE profile ADD COLUMN touch_id_enabled INTEGER NOT NULL DEFAULT 0`,
+        `ALTER TABLE profile ADD COLUMN invoice_prefix TEXT NOT NULL DEFAULT ''`,
+        `ALTER TABLE credit_notes ADD COLUMN number TEXT`,
+        `ALTER TABLE credit_notes ADD COLUMN pdf_path TEXT`,
+        `ALTER TABLE invoices ADD COLUMN credited_pdf_path TEXT`,
+        `ALTER TABLE payments ADD COLUMN receipt_number TEXT`,
+        `ALTER TABLE payments ADD COLUMN receipt_path TEXT`,
     ]) {
         try { db.exec(sql) } catch { /* already exists */ }
     }
 
-    // overdue is now computed — convert any stored 'overdue' rows to 'sent'
-    db.exec("UPDATE invoices SET status = 'sent' WHERE status = 'overdue'")
+    // Phase 1 — status migration: populate invoice_sequences from existing numbers,
+    // then normalize status values to the new document-lifecycle model.
+
+    // Step 1: For invoices currently "paid" with no payment records, create synthetic payments
+    // so the computed payment status stays correct after we drop "paid" as a DB status.
+    db.exec(`
+        INSERT INTO payments (invoice_id, payment_date, amount, payment_method, reference, notes, created_at)
+        SELECT id, issue_date, total, 'other', NULL,
+               'Paiement migré automatiquement',
+               datetime('now')
+        FROM invoices
+        WHERE status = 'paid'
+          AND id NOT IN (SELECT DISTINCT invoice_id FROM payments)
+    `)
+
+    // Step 2: Normalize status values
+    db.exec("UPDATE invoices SET status = 'issued' WHERE status = 'sent'")
+    db.exec("UPDATE invoices SET status = 'issued' WHERE status = 'paid'")
+    db.exec("UPDATE invoices SET status = 'voided' WHERE status = 'refused'")
+    db.exec("UPDATE invoices SET status = 'voided' WHERE status = 'cancelled'")
+    // overdue was already computed; any lingering rows become issued
+    db.exec("UPDATE invoices SET status = 'issued' WHERE status = 'overdue'")
+
+    // Step 3: Seed invoice_sequences from existing invoice numbers so the generator
+    // continues from the right place rather than restarting at 1.
+    const existingNumbers = db.prepare("SELECT number FROM invoices WHERE status != 'draft'").all() as { number: string }[]
+    const yearSeqMap = new Map<number, number>()
+    for (const { number } of existingNumbers) {
+        const yearMatch = number.match(/(\d{4})[-_](\d+)$/)
+        if (!yearMatch) continue
+        const year = parseInt(yearMatch[1], 10)
+        const seq = parseInt(yearMatch[2], 10)
+        if (!isNaN(year) && !isNaN(seq)) {
+            yearSeqMap.set(year, Math.max(yearSeqMap.get(year) ?? 0, seq))
+        }
+    }
+    const upsertSeq = db.prepare(
+        `INSERT INTO invoice_sequences (year, last_sequence_number) VALUES (?, ?)
+         ON CONFLICT(year) DO UPDATE SET last_sequence_number = MAX(last_sequence_number, excluded.last_sequence_number)`
+    )
+    for (const [year, seq] of yearSeqMap) {
+        upsertSeq.run(year, seq)
+    }
 
     if (skipStaleCleanup) return
 

@@ -1,5 +1,5 @@
 import { ipcMain, dialog } from "electron"
-import { getDb, invoices, clients, expenses, profile } from "../../db/schema"
+import { getDb, getRawDb, invoices, clients, expenses, profile } from "../../db/schema"
 import { writeFileSync } from "fs"
 import puppeteer from "puppeteer"
 
@@ -24,6 +24,39 @@ const CATEGORY_LABELS_FR: Record<string, string> = {
     other: "Autre",
 }
 
+interface PaymentRow {
+    invoiceId: number
+    invoiceNumber: string
+    clientId: number
+    issueDate: string
+    paymentDate: string
+    amount: number
+}
+
+function getPaymentsByYear(year: number): PaymentRow[] {
+    const rawDb = getRawDb()
+    const rows = rawDb.prepare(`
+        SELECT p.invoice_id, p.payment_date, p.amount,
+               i.number AS invoice_number, i.client_id, i.issue_date
+        FROM payments p
+        JOIN invoices i ON p.invoice_id = i.id
+        WHERE strftime('%Y', p.payment_date) = ?
+          AND i.status != 'voided'
+        ORDER BY p.payment_date ASC
+    `).all(String(year)) as {
+        invoice_id: number; invoice_number: string; client_id: number
+        issue_date: string; payment_date: string; amount: number
+    }[]
+    return rows.map((r) => ({
+        invoiceId: r.invoice_id,
+        invoiceNumber: r.invoice_number,
+        clientId: r.client_id,
+        issueDate: r.issue_date,
+        paymentDate: r.payment_date,
+        amount: r.amount,
+    }))
+}
+
 function fmt(n: number, locale: string): string {
     return locale === "fr-CA"
         ? `${n.toFixed(2).replace(".", ",")} $`
@@ -46,25 +79,32 @@ export function registerReportHandlers(): void {
             if (!dest) return { success: false, error: "cancelled" }
 
             const db = getDb()
-            const allInvoices = db.select().from(invoices).all()
-                .filter((inv) => inv.issueDate.startsWith(String(year)) && inv.status === "paid")
+            const yearPayments = getPaymentsByYear(year)
             const allClients = db.select().from(clients).all()
             const allExpenses = db.select().from(expenses).all().filter((e) => e.year === year)
             const clientMap = new Map(allClients.map((c) => [c.id, c]))
+
+            // Group payments by invoice to get cash received per invoice
+            const byInvoice = new Map<number, { number: string; clientId: number; issueDate: string; received: number }>()
+            for (const p of yearPayments) {
+                const entry = byInvoice.get(p.invoiceId) ?? { number: p.invoiceNumber, clientId: p.clientId, issueDate: p.issueDate, received: 0 }
+                entry.received += p.amount
+                byInvoice.set(p.invoiceId, entry)
+            }
 
             const rows: string[] = []
             // UTF-8 BOM for Excel compatibility
             rows.push("﻿RAPPORT FISCAL ANNUEL — " + year)
             rows.push("")
 
-            rows.push("REVENUS (factures payées)")
-            rows.push("Numéro,Client,Date,Montant ($)")
+            rows.push("REVENUS PERÇUS (base de caisse)")
+            rows.push("Numéro,Client,Date d'émission,Montant reçu ($)")
             let totalRevenue = 0
-            for (const inv of allInvoices) {
+            for (const [, inv] of byInvoice) {
                 const client = clientMap.get(inv.clientId)
                 const name = (client?.companyName ?? client?.name ?? "—").replace(/"/g, '""')
-                rows.push(`${inv.number},"${name}",${inv.issueDate},${inv.total.toFixed(2)}`)
-                totalRevenue += inv.total
+                rows.push(`${inv.number},"${name}",${inv.issueDate},${inv.received.toFixed(2)}`)
+                totalRevenue += inv.received
             }
             rows.push(`TOTAL REVENUS,,,${totalRevenue.toFixed(2)}`)
             rows.push("")
@@ -118,22 +158,29 @@ export function registerReportHandlers(): void {
             const db = getDb()
             const prof = db.select().from(profile).limit(1).all()[0]
             const locale = prof?.locale ?? "fr-CA"
-            const allInvoices = db.select().from(invoices).all()
-                .filter((inv) => inv.issueDate.startsWith(String(year)) && inv.status === "paid")
+            const yearPayments = getPaymentsByYear(year)
             const allClients = db.select().from(clients).all()
             const allExpenses = db.select().from(expenses).all().filter((e) => e.year === year)
             const clientMap = new Map(allClients.map((c) => [c.id, c]))
+
+            // Group payments by invoice
+            const byInvoice = new Map<number, { number: string; clientId: number; issueDate: string; received: number }>()
+            for (const p of yearPayments) {
+                const entry = byInvoice.get(p.invoiceId) ?? { number: p.invoiceNumber, clientId: p.clientId, issueDate: p.issueDate, received: 0 }
+                entry.received += p.amount
+                byInvoice.set(p.invoiceId, entry)
+            }
 
             let totalRevenue = 0
             let totalDeductible = 0
             let totalGst = 0
             let totalQst = 0
 
-            const invoiceRows = allInvoices.map((inv) => {
+            const invoiceRows = [...byInvoice.values()].map((inv) => {
                 const client = clientMap.get(inv.clientId)
                 const name = client?.companyName ?? client?.name ?? "—"
-                totalRevenue += inv.total
-                return `<tr><td>${inv.number}</td><td>${name}</td><td>${fmtDate(inv.issueDate, locale)}</td><td class="right">${fmt(inv.total, locale)}</td></tr>`
+                totalRevenue += inv.received
+                return `<tr><td>${inv.number}</td><td>${name}</td><td>${fmtDate(inv.issueDate, locale)}</td><td class="right">${fmt(inv.received, locale)}</td></tr>`
             }).join("")
 
             // Expenses grouped by category

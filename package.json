@@ -11,7 +11,10 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit",
-    "postinstall": "electron-rebuild -f -w better-sqlite3"
+    "postinstall": "electron-builder install-app-deps && electron-rebuild -f -w better-sqlite3",
+    "build:win": "npm run build && electron-builder --win --config",
+    "build:mac": "npm run build && electron-builder --mac --config",
+    "build:linux": "npm run build && electron-builder --linux --config"
   },
   "dependencies": {
     "@hookform/resolvers": "3.4.2",
@@ -44,6 +47,7 @@
     "autoprefixer": "10.4.19",
     "drizzle-kit": "0.21.4",
     "electron": "30.0.6",
+    "electron-builder": "^26.8.1",
     "electron-vite": "2.3.0",
     "postcss": "8.4.38",
     "tailwindcss": "3.4.4",

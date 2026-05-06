@@ -22,6 +22,7 @@ type PaymentFormValues = z.infer<typeof paymentSchema>
 interface PaymentFormModalProps {
     invoice: Invoice
     existingPayments: Payment[]
+    totalCredit?: number
     editPayment?: Payment
     onClose: () => void
     onSaved: (payment: Payment) => void
@@ -31,7 +32,7 @@ function toIsoDate(d: Date): string {
     return d.toISOString().split("T")[0]
 }
 
-export function PaymentFormModal({ invoice, existingPayments, editPayment, onClose, onSaved }: PaymentFormModalProps): JSX.Element {
+export function PaymentFormModal({ invoice, existingPayments, totalCredit = 0, editPayment, onClose, onSaved }: PaymentFormModalProps): JSX.Element {
     const { t } = useTranslation()
     const profile = useAtomValue(profileAtom)
     const locale = profile?.locale ?? "fr-CA"
@@ -40,7 +41,7 @@ export function PaymentFormModal({ invoice, existingPayments, editPayment, onClo
     // When editing, exclude the payment being edited from the "already paid" sum
     const otherPayments = existingPayments.filter((p) => p.id !== editPayment?.id)
     const totalPaid = otherPayments.reduce((sum, p) => sum + p.amount, 0)
-    const remaining = Math.max(0, invoice.total - totalPaid)
+    const remaining = Math.max(0, invoice.total - totalPaid - totalCredit)
 
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState("")
@@ -141,6 +142,12 @@ export function PaymentFormModal({ invoice, existingPayments, editPayment, onClo
                             <div className="flex justify-between">
                                 <span className="text-muted-foreground">{t("payments.totalPaid")}</span>
                                 <span>{fmt(totalPaid)}</span>
+                            </div>
+                        ) : null}
+                        {totalCredit > 0 ? (
+                            <div className="flex justify-between">
+                                <span className="text-muted-foreground">{t("invoices.totalCredit")}</span>
+                                <span className="text-purple-700">− {fmt(totalCredit)}</span>
                             </div>
                         ) : null}
                         <div className="flex justify-between border-t pt-1 font-semibold">

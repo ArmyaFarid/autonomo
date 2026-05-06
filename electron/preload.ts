@@ -31,6 +31,12 @@ const api = {
         ipcRenderer.invoke("invoices:updateStatus", id, status),
     reopenInvoice: (id: number) => ipcRenderer.invoke("invoices:reopen", id),
     getNextInvoiceNumber: () => ipcRenderer.invoke("invoices:nextNumber"),
+    // Phase 1 — lifecycle actions
+    issueInvoice: (id: number) => ipcRenderer.invoke("invoices:issue", id),
+    voidInvoice: (id: number) => ipcRenderer.invoke("invoices:void", id),
+    addCreditNote: (data: unknown) => ipcRenderer.invoke("invoices:addCreditNote", data),
+    // Phase 4 — legacy entry collision detection
+    checkInvoiceNumberExists: (number: string) => ipcRenderer.invoke("invoices:checkNumberExists", number),
 
     // Expenses
     getExpenses: (filters?: unknown) => ipcRenderer.invoke("expenses:getAll", filters),
@@ -42,6 +48,7 @@ const api = {
 
     // Payments
     getPayments: (invoiceId: number) => ipcRenderer.invoke("payments:getForInvoice", invoiceId),
+    getPaymentsByYear: (year: number) => ipcRenderer.invoke("payments:getByYear", year),
     createPayment: (data: unknown) => ipcRenderer.invoke("payments:create", data),
     updatePayment: (id: number, data: unknown) => ipcRenderer.invoke("payments:update", id, data),
     deletePayment: (id: number) => ipcRenderer.invoke("payments:delete", id),
@@ -65,6 +72,8 @@ const api = {
     openFileDialog: (options: unknown) => ipcRenderer.invoke("dialog:openFile", options),
     saveFileDialog: (options: unknown) => ipcRenderer.invoke("dialog:saveFile", options),
     openPath: (filePath: string) => ipcRenderer.invoke("shell:openPath", filePath),
+    // Phase 3 — open the tax exports folder
+    openTaxFolder: () => ipcRenderer.invoke("shell:openTaxFolder"),
 
     // Config
     getConfig: () => ipcRenderer.invoke("config:get"),

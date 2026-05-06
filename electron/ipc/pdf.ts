@@ -95,85 +95,128 @@ function buildTotalsRows(invoice: {
         </tr>`
 }
 
+// Phase 2 — watermark overlay injected before </body>
+function buildWatermarkBlock(text: string): string {
+    return `
+    <div style="
+        position: fixed; top: 50%; left: 50%;
+        transform: translate(-50%, -50%) rotate(-35deg);
+        font-size: 80px; font-weight: 900;
+        color: rgba(180, 0, 0, 0.12);
+        white-space: nowrap; pointer-events: none;
+        z-index: 9999; letter-spacing: 4px;
+        font-family: Arial, sans-serif;
+    ">${text}</div>`
+}
+
+interface GeneratePdfOptions {
+    // Phase 2: suffix appended to the filename before the extension (e.g. "_ISSUED")
+    suffix?: string
+    // Phase 2: watermark text overlaid diagonally on the PDF
+    watermark?: string
+    // Which DB column to update with the generated path (default: pdfPath)
+    updateField?: "pdfPath" | "creditedPdfPath"
+}
+
+// Exported for use by invoices.ts issue/void handlers (Phase 2 reactive automation).
+export async function generateInvoicePdf(invoiceId: number, options: GeneratePdfOptions = {}): Promise<string> {
+    const db = getDb()
+    const invoice = db.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1).all()[0]
+    if (!invoice) throw new Error("Invoice not found")
+
+    const client = db.select().from(clients).where(eq(clients.id, invoice.clientId)).limit(1).all()[0]
+    const prof = db.select().from(profile).limit(1).all()[0]
+    if (!client || !prof) throw new Error("Missing client or profile")
+
+    const lines = db
+        .select()
+        .from(invoiceLines)
+        .where(eq(invoiceLines.invoiceId, invoiceId))
+        .orderBy(invoiceLines.position)
+        .all()
+
+    const locale = prof.locale ?? "fr-CA"
+    const templatePath = join(__dirname, "../../templates/invoice-default.html")
+    let html = readFileSync(templatePath, "utf-8")
+
+    const logoBlock = prof.logoPath ? `<img src="file://${prof.logoPath}" alt="Logo" />` : ""
+
+    const issuerLines: string[] = [prof.name]
+    for (const line of (prof.address ?? "").split("\n")) {
+        if (line.trim()) issuerLines.push(line.trim())
+    }
+    const cityLine = [prof.city, prof.province, prof.postalCode].filter(Boolean).join(" ")
+    if (cityLine) issuerLines.push(cityLine)
+    if (prof.country) issuerLines.push(prof.country)
+    if (prof.phone) issuerLines.push(prof.phone)
+    if (prof.email) issuerLines.push(prof.email)
+    if (prof.gstNumber) issuerLines.push(`TPS : ${prof.gstNumber}`)
+    if (prof.qstNumber) issuerLines.push(`TVQ : ${prof.qstNumber}`)
+    const issuerBlock = issuerLines.filter(Boolean).join("<br>")
+
+    const dueDateLabel = locale === "fr-CA" ? "Date d'échéance" : "Due date"
+    const dueDateBlock = invoice.dueDate
+        ? `<div class="meta-label" style="margin-top:6px">${dueDateLabel}</div><div class="meta-value" style="font-size:10pt;color:#c0392b">${formatDate(invoice.dueDate, locale)}</div>`
+        : ""
+
+    const replacements: Record<string, string> = {
+        "{{logoBlock}}": logoBlock,
+        "{{issuerBlock}}": issuerBlock,
+        "{{clientName}}": client.companyName ?? client.name,
+        "{{clientAddress}}": (client.address ?? "").replace(/\n/g, "<br>"),
+        "{{date}}": formatDate(invoice.issueDate, locale),
+        "{{dueDateBlock}}": dueDateBlock,
+        "{{number}}": invoice.number,
+        "{{total}}": formatCurrency(invoice.total, locale),
+        "{{descriptionBlock}}": buildDescriptionBlock(invoice, lines, locale),
+        "{{lineItems}}": buildLineItems(lines, locale),
+        "{{totalsRows}}": buildTotalsRows(invoice, locale),
+    }
+
+    for (const [key, value] of Object.entries(replacements)) {
+        html = html.replaceAll(key, value)
+    }
+
+    // Phase 2 — inject watermark before </body>
+    if (options.watermark) {
+        html = html.replace("</body>", `${buildWatermarkBlock(options.watermark)}</body>`)
+    }
+
+    const year = invoice.issueDate.substring(0, 4)
+    const userSlug = buildSlug(prof.name)
+    const clientSlug = buildSlug(client.companyName ?? client.name)
+    const suffix = options.suffix ? `_${options.suffix}` : ""
+    const outputDir = join(getDataRootPath(), "attachments", "invoices", year)
+    if (!existsSync(outputDir)) mkdirSync(outputDir, { recursive: true })
+    const pdfPath = join(outputDir, `invoice_${userSlug}_${invoice.number}_${clientSlug}_${invoice.issueDate}${suffix}.pdf`)
+
+    const browser = await puppeteer.launch({ headless: true })
+    const page = await browser.newPage()
+    await page.setContent(html, { waitUntil: "networkidle0" })
+    await page.pdf({ path: pdfPath, format: "A4", printBackground: true })
+    await browser.close()
+
+    const dbUpdate = options.updateField === "creditedPdfPath"
+        ? { creditedPdfPath: pdfPath, updatedAt: new Date().toISOString() }
+        : { pdfPath, updatedAt: new Date().toISOString() }
+    db.update(invoices)
+        .set(dbUpdate)
+        .where(eq(invoices.id, invoiceId))
+        .run()
+
+    return pdfPath
+}
+
 export function registerPdfHandlers(): void {
     ipcMain.handle("pdf:generateInvoice", async (_event, invoiceId: number) => {
         try {
             const db = getDb()
             const invoice = db.select().from(invoices).where(eq(invoices.id, invoiceId)).limit(1).all()[0]
             if (!invoice) return { success: false, error: "Invoice not found" }
-            if (invoice.status === "paid") return { success: false, error: "paid" }
+            // Voided invoices cannot be manually regenerated — they get auto-generated on void
+            if (invoice.status === "voided") return { success: false, error: "voided" }
 
-            const client = db.select().from(clients).where(eq(clients.id, invoice.clientId)).limit(1).all()[0]
-            const prof = db.select().from(profile).limit(1).all()[0]
-            if (!client || !prof) return { success: false, error: "Missing client or profile" }
-
-            const lines = db
-                .select()
-                .from(invoiceLines)
-                .where(eq(invoiceLines.invoiceId, invoiceId))
-                .orderBy(invoiceLines.position)
-                .all()
-
-            const locale = prof.locale ?? "fr-CA"
-            const templatePath = join(__dirname, "../../templates/invoice-default.html")
-            let html = readFileSync(templatePath, "utf-8")
-
-            const logoBlock = prof.logoPath ? `<img src="file://${prof.logoPath}" alt="Logo" />` : ""
-
-            const issuerLines: string[] = [prof.name]
-            for (const line of (prof.address ?? "").split("\n")) {
-                if (line.trim()) issuerLines.push(line.trim())
-            }
-            const cityLine = [prof.city, prof.province, prof.postalCode].filter(Boolean).join(" ")
-            if (cityLine) issuerLines.push(cityLine)
-            if (prof.country) issuerLines.push(prof.country)
-            if (prof.phone) issuerLines.push(prof.phone)
-            if (prof.email) issuerLines.push(prof.email)
-            if (prof.gstNumber) issuerLines.push(`TPS : ${prof.gstNumber}`)
-            if (prof.qstNumber) issuerLines.push(`TVQ : ${prof.qstNumber}`)
-            const issuerBlock = issuerLines.filter(Boolean).join("<br>")
-
-            const dueDateLabel = locale === "fr-CA" ? "Date d'échéance" : "Due date"
-            const dueDateBlock = invoice.dueDate
-                ? `<div class="meta-label" style="margin-top:6px">${dueDateLabel}</div><div class="meta-value" style="font-size:10pt;color:#c0392b">${formatDate(invoice.dueDate, locale)}</div>`
-                : ""
-
-            const replacements: Record<string, string> = {
-                "{{logoBlock}}": logoBlock,
-                "{{issuerBlock}}": issuerBlock,
-                "{{clientName}}": client.companyName ?? client.name,
-                "{{clientAddress}}": (client.address ?? "").replace(/\n/g, "<br>"),
-                "{{date}}": formatDate(invoice.issueDate, locale),
-                "{{dueDateBlock}}": dueDateBlock,
-                "{{number}}": invoice.number,
-                "{{total}}": formatCurrency(invoice.total, locale),
-                "{{descriptionBlock}}": buildDescriptionBlock(invoice, lines, locale),
-                "{{lineItems}}": buildLineItems(lines, locale),
-                "{{totalsRows}}": buildTotalsRows(invoice, locale),
-            }
-
-            for (const [key, value] of Object.entries(replacements)) {
-                html = html.replaceAll(key, value)
-            }
-
-            const year = invoice.issueDate.substring(0, 4)
-            const userSlug = buildSlug(prof.name)
-            const clientSlug = buildSlug(client.companyName ?? client.name)
-            const outputDir = join(getDataRootPath(), "attachments", "invoices", year)
-            if (!existsSync(outputDir)) mkdirSync(outputDir, { recursive: true })
-            const pdfPath = join(outputDir, `invoice_${userSlug}_${invoice.number}_${clientSlug}_${invoice.issueDate}.pdf`)
-
-            const browser = await puppeteer.launch({ headless: true })
-            const page = await browser.newPage()
-            await page.setContent(html, { waitUntil: "networkidle0" })
-            await page.pdf({ path: pdfPath, format: "A4", printBackground: true })
-            await browser.close()
-
-            db.update(invoices)
-                .set({ pdfPath, updatedAt: new Date().toISOString() })
-                .where(eq(invoices.id, invoiceId))
-                .run()
-
+            const pdfPath = await generateInvoicePdf(invoiceId)
             return { success: true, data: pdfPath }
         } catch (error) {
             return { success: false, error: String(error) }
