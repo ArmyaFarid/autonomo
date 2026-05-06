@@ -157,6 +157,7 @@ export function CreateInvoiceForm({ invoice, invoiceLines: editLines, onSaved, o
         d.setDate(d.getDate() + 30)
         return toIsoDate(d)
     })
+    const [hideClientAddress, setHideClientAddress] = useState(() => !!invoice?.hideClientAddress)
     // Skip the clientId effect on initial mount when editing — we already have saved data
     const skipClientPrefillRef = useRef(editMode)
 
@@ -232,6 +233,7 @@ export function CreateInvoiceForm({ invoice, invoiceLines: editLines, onSaved, o
         if (!clientId || Number(clientId) === 0) return
         const client = activeClients.find((c) => c.id === Number(clientId))
         if (!client) return
+        setHideClientAddress(!!client.hideClientAddress)
         const period = suggestPeriod(client)
         setValue("periodStart", period.start)
         setValue("periodEnd", period.end)
@@ -331,6 +333,7 @@ export function CreateInvoiceForm({ invoice, invoiceLines: editLines, onSaved, o
             total,
             dueDate: dueDate ?? null,
             status,
+            hideClientAddress: hideClientAddress ? 1 : 0,
             notes: values.notes || null,
         }
 
@@ -761,6 +764,15 @@ export function CreateInvoiceForm({ invoice, invoiceLines: editLines, onSaved, o
 
                 <Section title={t("invoices.notes")}>
                     <textarea {...form.register("notes")} rows={2} className={textareaCn} />
+                    <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm">
+                        <input
+                            type="checkbox"
+                            checked={hideClientAddress}
+                            onChange={(e) => setHideClientAddress(e.target.checked)}
+                            className="h-4 w-4 rounded border"
+                        />
+                        {t("invoices.hideClientAddress")}
+                    </label>
                 </Section>
 
                 {error ? <p className="text-destructive text-sm">{error}</p> : null}

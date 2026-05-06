@@ -53,6 +53,7 @@ export interface Client {
     defaultHoursPerPeriod: number | null
     billingFrequency: "biweekly" | "monthly" | "one-time"
     active: number
+    hideClientAddress: number
     notes: string | null
     createdAt: string
     updatedAt: string
@@ -89,6 +90,7 @@ export interface Invoice {
     total: number
     dueDate: string | null
     status: "draft" | "issued" | "voided"
+    hideClientAddress: number
     notes: string | null
     pdfPath: string | null
     creditedPdfPath: string | null

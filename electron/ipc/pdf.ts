@@ -171,7 +171,9 @@ export async function generateInvoicePdf(invoiceId: number, options: GeneratePdf
         "{{logoBlock}}": logoBlock,
         "{{issuerBlock}}": issuerBlock,
         "{{clientName}}": client.companyName ?? client.name,
-        "{{clientAddress}}": buildClientAddress(client as Record<string, unknown>),
+        "{{clientAddressBlock}}": invoice.hideClientAddress
+            ? ""
+            : `<div class="meta-client-addr">${buildClientAddress(client as Record<string, unknown>)}</div>`,
         "{{date}}": formatDate(invoice.issueDate, locale),
         "{{dueDateBlock}}": dueDateBlock,
         "{{number}}": invoice.number,

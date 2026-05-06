@@ -85,6 +85,7 @@ export const clients = sqliteTable("clients", {
     defaultHoursPerPeriod: real("default_hours_per_period"),
     billingFrequency: text("billing_frequency").notNull().default("biweekly"),
     active: integer("active").notNull().default(1),
+    hideClientAddress: integer("hide_client_address").notNull().default(0),
     notes: text("notes"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
@@ -109,6 +110,7 @@ export const invoices = sqliteTable("invoices", {
     total: real("total").notNull(),
     dueDate: text("due_date"),
     status: text("status").notNull().default("draft"),
+    hideClientAddress: integer("hide_client_address").notNull().default(0),
     notes: text("notes"),
     pdfPath: text("pdf_path"),
     creditedPdfPath: text("credited_pdf_path"),
@@ -394,6 +396,8 @@ function runMigrations(db: Database.Database, skipStaleCleanup = false): void {
         `ALTER TABLE clients ADD COLUMN city TEXT`,
         `ALTER TABLE clients ADD COLUMN province TEXT`,
         `ALTER TABLE clients ADD COLUMN postal_code TEXT`,
+        `ALTER TABLE clients ADD COLUMN hide_client_address INTEGER NOT NULL DEFAULT 0`,
+        `ALTER TABLE invoices ADD COLUMN hide_client_address INTEGER NOT NULL DEFAULT 0`,
     ]) {
         try { db.exec(sql) } catch { /* already exists */ }
     }

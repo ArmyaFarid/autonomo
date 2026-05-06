@@ -43,6 +43,7 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({ client, onSave
         province: "QC",
         postalCode: "",
     })
+    const [hideClientAddress, setHideClientAddress] = useState(false)
 
     const form = useForm<ClientFormValues>({
         resolver: zodResolver(clientSchema),
@@ -83,6 +84,7 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({ client, onSave
                 province: client.province ?? "QC",
                 postalCode: client.postalCode ?? "",
             })
+            setHideClientAddress(!!client.hideClientAddress)
         }
     }, [client])
 
@@ -109,6 +111,7 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({ client, onSave
             hourlyRate: values.hourlyRate ?? null,
             defaultHoursPerPeriod: values.defaultHoursPerPeriod ?? null,
             notes: values.notes || null,
+            hideClientAddress: hideClientAddress ? 1 : 0,
         }
 
         const result = isEdit
@@ -211,6 +214,16 @@ export const ClientFormModal: React.FC<ClientFormModalProps> = ({ client, onSave
                         <Field label={t("clients.notes")}>
                             <textarea {...form.register("notes")} rows={3} className={textareaCn} />
                         </Field>
+
+                        <label className="flex cursor-pointer items-center gap-2 text-sm">
+                            <input
+                                type="checkbox"
+                                checked={hideClientAddress}
+                                onChange={(e) => setHideClientAddress(e.target.checked)}
+                                className="h-4 w-4 rounded border"
+                            />
+                            {t("clients.hideClientAddress")}
+                        </label>
                     </div>
 
                     {error ? <p className="text-destructive mt-4 text-sm">{error}</p> : null}
