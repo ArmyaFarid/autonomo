@@ -49,6 +49,7 @@ export function ImportInvoiceForm({ onSaved, onCancel }: ImportInvoiceFormProps)
 
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState("")
+    const [syncSequence, setSyncSequence] = useState(true)
     const [pdfSourcePath, setPdfSourcePath] = useState<string | null>(null)
     const [paymentProofPath, setPaymentProofPath] = useState<string | null>(null)
     const [numberExists, setNumberExists] = useState(false)
@@ -184,6 +185,11 @@ export function ImportInvoiceForm({ onSaved, onCancel }: ImportInvoiceFormProps)
 
         const saved = (result.data as { invoice: Invoice }).invoice
 
+        if (syncSequence) {
+            const year = parseInt(values.issueDate.substring(0, 4), 10)
+            await window.api.syncInvoiceSequenceFromImport(values.number.trim(), year)
+        }
+
         if (pdfSourcePath) {
             await window.api.attachImportedPdf({ invoiceId: saved.id, sourcePath: pdfSourcePath })
         }
@@ -252,6 +258,32 @@ export function ImportInvoiceForm({ onSaved, onCancel }: ImportInvoiceFormProps)
                         ) : (
                             <p className="text-muted-foreground text-xs">{t("invoices.importNumberHint")}</p>
                         )}
+                        <div className="mt-2 space-y-1.5">
+                            <label className="flex cursor-pointer items-start gap-2.5 rounded-md border border-blue-200 bg-blue-50/60 px-3 py-2 text-sm">
+                                <input
+                                    type="radio"
+                                    checked={syncSequence}
+                                    onChange={() => setSyncSequence(true)}
+                                    className="mt-0.5 shrink-0"
+                                />
+                                <div>
+                                    <span className="font-medium text-blue-900">{t("invoices.sequenceAuto")}</span>
+                                    <p className="text-muted-foreground mt-0.5 text-xs">{t("invoices.sequenceAutoHint")}</p>
+                                </div>
+                            </label>
+                            <label className="flex cursor-pointer items-start gap-2.5 rounded-md border px-3 py-2 text-sm">
+                                <input
+                                    type="radio"
+                                    checked={!syncSequence}
+                                    onChange={() => setSyncSequence(false)}
+                                    className="mt-0.5 shrink-0"
+                                />
+                                <div>
+                                    <span className="font-medium">{t("invoices.sequenceForce")}</span>
+                                    <p className="text-muted-foreground mt-0.5 text-xs">{t("invoices.sequenceForceHint")}</p>
+                                </div>
+                            </label>
+                        </div>
                     </Field>
                     <Field label={`${t("invoices.client")} *`} error={form.formState.errors.clientId?.message}>
                         <select {...form.register("clientId")} className={selectCn}>

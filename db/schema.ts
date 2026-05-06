@@ -32,6 +32,8 @@ export const profile = sqliteTable("profile", {
     backupRetentionCount: integer("backup_retention_count").notNull().default(1),
     lateInvoiceAlertDays: integer("late_invoice_alert_days").notNull().default(30),
     taxReserveRate: real("tax_reserve_rate").notNull().default(0.20),
+    suppressIssueConfirm: integer("suppress_issue_confirm").notNull().default(0),
+    suppressVoidConfirm: integer("suppress_void_confirm").notNull().default(0),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
 })
@@ -386,6 +388,8 @@ function runMigrations(db: Database.Database, skipStaleCleanup = false): void {
         `ALTER TABLE payments ADD COLUMN receipt_number TEXT`,
         `ALTER TABLE payments ADD COLUMN receipt_path TEXT`,
         `ALTER TABLE profile ADD COLUMN address_line2 TEXT`,
+        `ALTER TABLE profile ADD COLUMN suppress_issue_confirm INTEGER NOT NULL DEFAULT 0`,
+        `ALTER TABLE profile ADD COLUMN suppress_void_confirm INTEGER NOT NULL DEFAULT 0`,
         `ALTER TABLE clients ADD COLUMN address_line2 TEXT`,
         `ALTER TABLE clients ADD COLUMN city TEXT`,
         `ALTER TABLE clients ADD COLUMN province TEXT`,

@@ -95,11 +95,11 @@ export const AddressBlock: React.FC<AddressBlockProps> = ({ value, onChange, lin
         if (debounceRef.current) clearTimeout(debounceRef.current)
         debounceRef.current = setTimeout(async () => {
             try {
-                const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(raw)}&countrycodes=ca&addressdetails=1&format=json&limit=5`
-                const res = await fetch(url, { headers: { "User-Agent": "Autonomo/1.0" } })
-                const data: NominatimResult[] = await res.json()
-                setSuggestions(data)
-                setShowSuggestions(data.length > 0)
+                const res = await window.api.searchAddress(raw)
+                if (res.success && Array.isArray(res.data)) {
+                    setSuggestions(res.data as NominatimResult[])
+                    setShowSuggestions((res.data as NominatimResult[]).length > 0)
+                }
             } catch {
                 setSuggestions([])
             }

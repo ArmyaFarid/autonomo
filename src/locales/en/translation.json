@@ -244,7 +244,11 @@
         "legacyPaymentDate": "Payment date",
         "legacyPaymentAmount": "Amount received",
         "legacyPaymentMethod": "Payment method",
-        "legacyPaymentProof": "Payment proof (optional)"
+        "legacyPaymentProof": "Payment proof (optional)",
+        "sequenceAuto": "Update counter automatically",
+        "sequenceAutoHint": "The next real number will be calculated from this imported number.",
+        "sequenceForce": "Do not update the counter",
+        "sequenceForceHint": "The invoice number counter will not be changed. Manage it manually in Settings."
     },
     "expenses": {
         "title": "Expenses",
@@ -361,7 +365,10 @@
         "taxFolderHint": "Your financial records are automatically synced to an Excel-ready spreadsheet here. You can send this file directly to your accountant during tax season.",
         "security": "Security",
         "preferences": "Preferences",
-        "exportBackup": "Export backup"
+        "exportBackup": "Export backup",
+        "application": "Application",
+        "openDataFolder": "Open data folder",
+        "resetDontShowAgain": "Reset hidden confirmations"
     },
     "security": {
         "enabled": "PIN lock enabled",

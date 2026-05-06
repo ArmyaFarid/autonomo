@@ -14,8 +14,6 @@ import { PaymentFormModal } from "./payment-form-modal"
 import { MarkPaidDialog } from "./mark-paid-dialog"
 
 const EDIT_WINDOW_MS = 5 * 60 * 1000
-const SUPPRESS_ISSUE_KEY = "suppress_issue_confirm"
-const SUPPRESS_VOID_KEY = "suppress_void_confirm"
 
 const editWindowStart = new Map<number, number>()
 
@@ -72,8 +70,8 @@ export function InvoiceDetailModal({ invoice, lines, onClose, onUpdated, onEdit 
     const [cancelStep, setCancelStep] = useState<"choice" | "credit">("choice")
     const [creditAmount, setCreditAmount] = useState("")
     const [creditReason, setCreditReason] = useState("")
-    const [suppressIssue, setSuppressIssue] = useState(() => !!localStorage.getItem(SUPPRESS_ISSUE_KEY))
-    const [suppressVoid, setSuppressVoid] = useState(() => !!localStorage.getItem(SUPPRESS_VOID_KEY))
+    const [suppressIssue, setSuppressIssue] = useState(() => !!profile?.suppressIssueConfirm)
+    const [suppressVoid, setSuppressVoid] = useState(() => !!profile?.suppressVoidConfirm)
 
     const [, setTick] = useState(0)
     useEffect(() => {
@@ -700,9 +698,8 @@ async function handleAttachProof(): Promise<void> {
                 <ConfirmModal
                     title={t("invoices.issueConfirmTitle")}
                     body={t("invoices.issueEffect")}
-                    suppressKey={SUPPRESS_ISSUE_KEY}
                     suppressLabel={t("invoices.dontShowAgain")}
-                    onSuppressChange={(v) => setSuppressIssue(v)}
+                    onSuppressChange={(v) => { setSuppressIssue(v); window.api.saveProfile({ suppressIssueConfirm: v ? 1 : 0 }) }}
                     onConfirm={handleIssue}
                     onCancel={() => setShowIssueConfirm(false)}
                     confirmLabel={t("invoices.issue")}
@@ -716,9 +713,8 @@ async function handleAttachProof(): Promise<void> {
                 <ConfirmModal
                     title={t("invoices.cancelOptionVoidTitle")}
                     body={t("invoices.cancelOptionVoidDesc")}
-                    suppressKey={SUPPRESS_VOID_KEY}
                     suppressLabel={t("invoices.dontShowAgain")}
-                    onSuppressChange={(v) => setSuppressVoid(v)}
+                    onSuppressChange={(v) => { setSuppressVoid(v); window.api.saveProfile({ suppressVoidConfirm: v ? 1 : 0 }) }}
                     onConfirm={handleVoid}
                     onCancel={() => setShowVoidConfirm(false)}
                     confirmLabel={t("invoices.cancelConfirmVoid")}
@@ -772,7 +768,6 @@ async function handleAttachProof(): Promise<void> {
 interface ConfirmModalProps {
     title: string
     body: string
-    suppressKey: string
     suppressLabel: string
     onSuppressChange: (v: boolean) => void
     onConfirm: () => void
@@ -783,16 +778,13 @@ interface ConfirmModalProps {
 }
 
 const ConfirmModal: React.FC<ConfirmModalProps> = ({
-    title, body, suppressKey, suppressLabel, onSuppressChange, onConfirm, onCancel, confirmLabel, confirmClassName, icon,
+    title, body, suppressLabel, onSuppressChange, onConfirm, onCancel, confirmLabel, confirmClassName, icon,
 }) => {
     const { t } = useTranslation()
     const [suppress, setSuppress] = useState(false)
 
     function handleConfirm(): void {
-        if (suppress) {
-            localStorage.setItem(suppressKey, "1")
-            onSuppressChange(true)
-        }
+        if (suppress) onSuppressChange(true)
         onConfirm()
     }
 

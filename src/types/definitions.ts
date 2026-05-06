@@ -30,6 +30,8 @@ export interface Profile {
     backupRetentionCount: number
     lateInvoiceAlertDays: number
     taxReserveRate: number
+    suppressIssueConfirm: number
+    suppressVoidConfirm: number
     createdAt: string
     updatedAt: string
 }

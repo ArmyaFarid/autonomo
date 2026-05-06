@@ -10,6 +10,7 @@ import { registerPdfHandlers } from "./ipc/pdf"
 import { registerBackupHandlers } from "./ipc/backup"
 import { registerProfileHandlers } from "./ipc/profile"
 import { registerReportHandlers } from "./ipc/reports"
+import { registerGeocodingHandlers } from "./ipc/geocoding"
 
 function createWindow(): void {
     const mainWindow = new BrowserWindow({
@@ -60,6 +61,7 @@ app.whenReady().then(() => {
     registerPdfHandlers()
     registerBackupHandlers()
     registerReportHandlers()
+    registerGeocodingHandlers()
 
     createWindow()
 

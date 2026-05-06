@@ -37,6 +37,7 @@ const api = {
     addCreditNote: (data: unknown) => ipcRenderer.invoke("invoices:addCreditNote", data),
     // Phase 4 — legacy entry collision detection
     checkInvoiceNumberExists: (number: string) => ipcRenderer.invoke("invoices:checkNumberExists", number),
+    syncInvoiceSequenceFromImport: (number: string, year: number) => ipcRenderer.invoke("invoices:syncSequenceFromImport", number, year),
 
     // Expenses
     getExpenses: (filters?: unknown) => ipcRenderer.invoke("expenses:getAll", filters),
@@ -74,10 +75,14 @@ const api = {
     openPath: (filePath: string) => ipcRenderer.invoke("shell:openPath", filePath),
     // Phase 3 — open the tax exports folder
     openTaxFolder: () => ipcRenderer.invoke("shell:openTaxFolder"),
+    openDataFolder: () => ipcRenderer.invoke("shell:openDataFolder"),
 
     // Config
     getConfig: () => ipcRenderer.invoke("config:get"),
     isFirstLaunch: () => ipcRenderer.invoke("config:isFirstLaunch"),
+
+    // Geocoding
+    searchAddress: (query: string) => ipcRenderer.invoke("geocoding:search", query),
 
     // App
     reloadWindow: () => ipcRenderer.invoke("app:reloadWindow"),

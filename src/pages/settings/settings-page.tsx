@@ -337,6 +337,30 @@ export function SettingsPage(): JSX.Element {
                             </div>
 
                             <div className="space-y-4">
+                                <h3 className="border-b pb-2 text-base font-semibold">{t("settings.application")}</h3>
+                                <div className="flex flex-wrap gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={async () => { await window.api.openDataFolder() }}
+                                        className={`${outlineBtnCn} flex items-center gap-2`}
+                                    >
+                                        <FolderOpen className="h-4 w-4" />
+                                        {t("settings.openDataFolder")}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            const res = await window.api.saveProfile({ suppressIssueConfirm: 0, suppressVoidConfirm: 0 })
+                                            if (res.success && res.data) setProfile(res.data as Profile)
+                                        }}
+                                        className={`${outlineBtnCn} flex items-center gap-2`}
+                                    >
+                                        {t("settings.resetDontShowAgain")}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
                                 <h3 className="border-b pb-2 text-base font-semibold">{t("settings.backup")}</h3>
                                 <div className="grid grid-cols-2 gap-4">
                                     <Field label={t("settings.backupInterval")}>

@@ -197,4 +197,16 @@ export function registerProfileHandlers(): void {
         }
     })
 
+    ipcMain.handle("shell:openDataFolder", async () => {
+        try {
+            const dataDir = getDataRootPath()
+            if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true })
+            const errMsg = await shell.openPath(dataDir)
+            if (errMsg) return { success: false, error: errMsg }
+            return { success: true }
+        } catch (error) {
+            return { success: false, error: String(error) }
+        }
+    })
+
 }

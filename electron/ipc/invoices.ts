@@ -534,6 +534,27 @@ export function registerInvoiceHandlers(): void {
         }
     })
 
+    // Sync the sequence counter after importing a historical invoice (only advances, never rewinds)
+    ipcMain.handle("invoices:syncSequenceFromImport", (_event, number: string, year: number) => {
+        try {
+            const segments = number.split(/[^0-9]+/).filter((s) => s.length > 0)
+            if (!segments.length) return { success: true }
+            const seq = parseInt(segments[segments.length - 1], 10)
+            if (!seq || seq <= 0) return { success: true }
+            getRawDb()
+                .prepare(`
+                    INSERT INTO invoice_sequences (year, last_sequence_number)
+                    VALUES (?, ?)
+                    ON CONFLICT(year) DO UPDATE SET
+                        last_sequence_number = MAX(last_sequence_number, excluded.last_sequence_number)
+                `)
+                .run(year, seq)
+            return { success: true }
+        } catch (error) {
+            return { success: false, error: String(error) }
+        }
+    })
+
     // Phase 4 — check whether an exact invoice number already exists (for legacy entry collision detection)
     ipcMain.handle("invoices:checkNumberExists", (_event, number: string) => {
         try {

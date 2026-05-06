@@ -244,7 +244,11 @@
         "legacyPaymentDate": "Date du paiement",
         "legacyPaymentAmount": "Montant reçu",
         "legacyPaymentMethod": "Mode de paiement",
-        "legacyPaymentProof": "Preuve de paiement (optionnel)"
+        "legacyPaymentProof": "Preuve de paiement (optionnel)",
+        "sequenceAuto": "Mettre à jour le compteur automatiquement",
+        "sequenceAutoHint": "Le prochain numéro réel sera calculé à partir de ce numéro importé.",
+        "sequenceForce": "Ne pas modifier le compteur",
+        "sequenceForceHint": "Le compteur de numéros ne sera pas modifié. Gérez-le manuellement dans Paramètres."
     },
     "expenses": {
         "title": "Dépenses",
@@ -361,7 +365,10 @@
         "taxFolderHint": "Vos registres financiers sont synchronisés automatiquement dans un tableur compatible Excel. Envoyez ce fichier directement à votre comptable lors de la saison des impôts.",
         "security": "Sécurité",
         "preferences": "Préférences",
-        "exportBackup": "Exporter une sauvegarde"
+        "exportBackup": "Exporter une sauvegarde",
+        "application": "Application",
+        "openDataFolder": "Ouvrir le dossier de données",
+        "resetDontShowAgain": "Réinitialiser les confirmations masquées"
     },
     "security": {
         "enabled": "Code PIN activé",

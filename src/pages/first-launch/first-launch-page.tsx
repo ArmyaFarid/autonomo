@@ -5,6 +5,8 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { CheckCircle, FileArchive, Plus, Shield } from "lucide-react"
 import type { Profile } from "../../types/definitions"
+import { AddressBlock } from "../../components/shared/address-block"
+import type { AddressValue } from "../../components/shared/address-block"
 
 interface FirstLaunchPageProps {
     onComplete: (profile: Profile) => void
@@ -14,7 +16,6 @@ type Step = "choice" | "setup" | "pin" | "restored"
 
 const profileSchema = z.object({
     name: z.string().min(1),
-    address: z.string().min(1),
     phone: z.string().optional(),
     email: z.string().email().optional().or(z.literal("")),
     defaultHourlyRate: z.coerce.number().min(0),
@@ -35,12 +36,13 @@ export function FirstLaunchPage({ onComplete }: FirstLaunchPageProps): JSX.Eleme
     const [pinValue, setPinValue] = useState("")
     const [pinConfirm, setPinConfirm] = useState("")
     const [pinError, setPinError] = useState("")
+    const [address, setAddress] = useState<AddressValue>({ line1: "", line2: "", city: "", province: "QC", postalCode: "" })
+    const [addressError, setAddressError] = useState("")
 
     const form = useForm<ProfileFormValues>({
         resolver: zodResolver(profileSchema),
         defaultValues: {
             name: "",
-            address: "",
             phone: "",
             email: "",
             defaultHourlyRate: 23,
@@ -71,12 +73,24 @@ export function FirstLaunchPage({ onComplete }: FirstLaunchPageProps): JSX.Eleme
     }
 
     async function handleSubmit(values: ProfileFormValues): Promise<void> {
+        if (!address.line1.trim()) {
+            setAddressError(t("setup.required"))
+            return
+        }
+        setAddressError("")
         setLoading(true)
         setError("")
         const lang = values.locale.startsWith("en") ? "en" : "fr"
         await i18n.changeLanguage(lang)
 
-        const result = await window.api.saveProfile(values)
+        const result = await window.api.saveProfile({
+            ...values,
+            address: address.line1.trim(),
+            addressLine2: address.line2.trim() || null,
+            city: address.city.trim() || null,
+            province: address.province || null,
+            postalCode: address.postalCode.trim() || null,
+        })
         if (result.success && result.data) {
             setSavedProfile(result.data as Profile)
             setStep("pin")
@@ -216,18 +230,12 @@ export function FirstLaunchPage({ onComplete }: FirstLaunchPageProps): JSX.Eleme
                             ) : null}
                         </div>
 
-                        <div className="space-y-1">
-                            <label className="text-sm font-medium">{t("setup.address")} *</label>
-                            <textarea
-                                {...form.register("address")}
-                                rows={3}
-                                placeholder={t("setup.addressPlaceholder")}
-                                className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-                            />
-                            {form.formState.errors.address ? (
-                                <p className="text-destructive text-xs">{t("setup.required")}</p>
-                            ) : null}
-                        </div>
+                        <AddressBlock
+                            value={address}
+                            onChange={setAddress}
+                            line1Error={addressError}
+                            required
+                        />
 
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1">
