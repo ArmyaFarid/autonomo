@@ -1,4 +1,4 @@
-# CLAUDE.md — ArmyaFacturation
+# CLAUDE.md — Autonomo
 
 > Read this file in full at the start of every session. Never deviate from the technical and business decisions documented here without explicit user validation. Check PROGRESS.md to know exactly where development left off.
 
@@ -6,9 +6,9 @@
 
 ## Context
 
-**User:** Armya, software developer, freelancer (travailleur autonome) in Quebec, international student.
+**User:** A software developer working as a freelancer (travailleur autonome) in Quebec, an international student.
 
-**What this app does:** Armya issues invoices to his clients (companies or individuals) for his software development services (development, prototyping, AI research, startup tech consulting). He needs a local desktop app to manage clients, issue invoices compliant with Quebec regulations, track business expenses, and prepare his annual tax return.
+**What this app does:** The user issues invoices to their clients (companies or individuals) for their software development services (development, prototyping, AI research, startup tech consulting). They need a local desktop app to manage clients, issue invoices compliant with Quebec regulations, track business expenses, and prepare their annual tax return.
 
 **Critical constraint — international student status:**
 Hours worked AND the work period are **mandatory on every invoice without exception**. These two fields can never be removed, hidden, or made optional. They serve as compliance proof for the Canadian study permit.
@@ -70,7 +70,7 @@ Electron + Vite + React + TypeScript
 ```
 
 **Why these choices:**
-- Electron over Tauri: Armya already masters the JS/TS stack and develops with Claude Code — 100% TypeScript, no Rust
+- Electron over Tauri: the developer already masters the JS/TS stack and develops with Claude Code — 100% TypeScript, no Rust
 - Jotai over Zustand: explicit user preference
 - Puppeteer over @react-pdf/renderer: invoice templates in plain HTML/CSS, editable directly in VS Code
 - better-sqlite3 for synchronous performance in Electron
@@ -122,7 +122,7 @@ A global React rules file exists at `~/.claude/rules/react.md`. Follow it, **but
 ## Folder Structure
 
 ```
-armya-facturation/
+autonomo/
   ├── CLAUDE.md                         (this file)
   ├── PROGRESS.md                       (progress tracker — updated every session)
   ├── MISTAKES.md                       (mistakes log — never repeat)
@@ -168,8 +168,8 @@ armya-facturation/
 
 **User data folder (runtime):**
 ```
-~/Documents/ArmyaFacturation/          (configurable in Settings)
-  ├── armya.db
+~/Documents/Autonomo/          (configurable in Settings)
+  ├── autonomo.db
   ├── config.json
   ├── attachments/
   │     ├── invoices/
@@ -177,7 +177,7 @@ armya-facturation/
   │     └── expenses/
   │           └── {expense_id}/
   └── backups/
-        └── armya-backup-YYYY-MM-DD.zip
+        └── autonomo-backup-YYYY-MM-DD.zip
 ```
 
 ---
@@ -304,7 +304,7 @@ export const expenses = sqliteTable('expenses', {
 
 ### Module 1 — Settings / Profile
 - Edit personal information
-- Configure data root path (default: `~/Documents/ArmyaFacturation/`)
+- Configure data root path (default: `~/Documents/Autonomo/`)
 - Upload logo (optional)
 - Configure invoice number format
 - Configure late invoice alert threshold (default: 30 days)
@@ -403,8 +403,8 @@ export const expenses = sqliteTable('expenses', {
 
 **Zip structure:**
 ```
-armya-backup-YYYY-MM-DD.zip
-  ├── armya.db
+autonomo-backup-YYYY-MM-DD.zip
+  ├── autonomo.db
   ├── attachments/
   └── manifest.json  → { appVersion, date, checksum, schemaVersion }
 ```
@@ -425,7 +425,7 @@ armya-backup-YYYY-MM-DD.zip
 3. **Sequential invoice numbering** — never reuse a number, never skip one
 4. **A sent invoice cannot be deleted** — only archived (accounting integrity)
 5. **Taxes at 0% by default** — only enabled manually per invoice
-6. **Local backup only** — no data ever leaves Armya's Mac
+6. **Local backup only** — no data ever leaves the user's Mac
 7. **French is the default locale** — fr-CA, never assume English
 
 ---
