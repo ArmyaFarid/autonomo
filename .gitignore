@@ -52,3 +52,9 @@ coverage/
 
 # Dev environment data (local SQLite + attachments, never commit)
 dev-data/
+
+# Claude Code workflow files (local only, never commit)
+.claude/
+CLAUDE.md
+MISTAKES.md
+PROGRESS.md
