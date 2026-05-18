@@ -112,9 +112,8 @@ docs/            Captures d'écran et documentation
 
 ## Données utilisateur
 
-Les données sont stockées dans `~/Documents/ArmyaFacturation/` (configurable) :
-base SQLite, `config.json`, pièces jointes et sauvegardes. Aucune donnée ne
-quitte la machine.
+Les données sont stockées dans `~/Documents/Autonomo/` : base de données
+SQLite, pièces jointes et sauvegardes. Aucune donnée ne quitte la machine.
 
 ## Développement assisté par IA
 
