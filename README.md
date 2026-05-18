@@ -77,6 +77,17 @@ templates/       Gabarits HTML/CSS des factures
 Les données sont stockées dans `~/Documents/ArmyaFacturation/` (configurable) :
 base SQLite, `config.json`, pièces jointes et sauvegardes.
 
+## Développement assisté par IA
+
+Une partie du code de ce projet a été produite avec l'assistance d'outils d'IA
+générative, utilisés comme support de développement. L'IA n'est pas autonome :
+elle travaille sous la direction, la supervision et la revue de l'auteur,
+**Armya Bakouan**, développeur logiciel et React fort de 4 ans d'expérience.
+
+L'architecture, les décisions techniques, les choix métier et la validation
+finale du code relèvent entièrement de l'auteur. L'IA accélère la mise en œuvre ;
+l'expertise humaine garde la responsabilité du résultat.
+
 ## Licence
 
 GNU General Public License v3.0 ou ultérieure — voir le fichier [`LICENSE`](LICENSE).
