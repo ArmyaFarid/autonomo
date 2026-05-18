@@ -79,4 +79,7 @@ base SQLite, `config.json`, pièces jointes et sauvegardes.
 
 ## Licence
 
-MIT
+GNU General Public License v3.0 ou ultérieure — voir le fichier [`LICENSE`](LICENSE).
+
+Le code est libre et ouvert. Toute version modifiée et distribuée doit rester
+sous licence GPL.
